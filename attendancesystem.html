@@ -411,6 +411,12 @@
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-xl font-semibold text-gray-800">Live Activity Feed</h3>
                     <div class="flex space-x-3">
+                        <button onclick="refreshAdminActivity()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/>
+                            </svg>
+                            <span>Refresh Activity</span>
+                        </button>
                         <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
                             Export to Excel
                         </button>
@@ -979,15 +985,104 @@
             }, 4000);
         }
         
+        // Force immediate activity sync to all admin accounts
+        function forceActivitySync(newActivity) {
+            console.log(`🚀 Force syncing new activity to all admin accounts: ${newActivity.type} by ${newActivity.tutor}`);
+            
+            // Immediately broadcast to all windows/tabs
+            try {
+                // Method 1: Custom event
+                window.dispatchEvent(new CustomEvent('forceActivityUpdate', { 
+                    detail: { 
+                        activity: newActivity, 
+                        timestamp: Date.now(), 
+                        deviceId: deviceId,
+                        fullActivityLog: activityLog
+                    } 
+                }));
+                
+                // Method 2: BroadcastChannel for cross-tab communication
+                if (typeof BroadcastChannel !== 'undefined') {
+                    const activityChannel = new BroadcastChannel('hkbu_activity_channel');
+                    activityChannel.postMessage({ 
+                        type: 'newActivity', 
+                        activity: newActivity,
+                        fullActivityLog: activityLog,
+                        timestamp: Date.now(), 
+                        deviceId: deviceId 
+                    });
+                }
+                
+                // Method 3: Multiple storage keys for better discovery
+                const activityData = {
+                    data: activityLog,
+                    timestamp: Date.now(),
+                    deviceId: deviceId,
+                    lastActivity: newActivity
+                };
+                
+                // Save with multiple keys for immediate discovery
+                localStorage.setItem('GLOBAL_ACTIVITY_IMMEDIATE', JSON.stringify(activityData));
+                localStorage.setItem(`ACTIVITY_UPDATE_${Date.now()}`, JSON.stringify(activityData));
+                sessionStorage.setItem('LATEST_ACTIVITY_UPDATE', JSON.stringify(activityData));
+                
+                // Method 4: Storage event trigger
+                window.dispatchEvent(new StorageEvent('storage', {
+                    key: 'GLOBAL_ACTIVITY_IMMEDIATE',
+                    newValue: JSON.stringify(activityData),
+                    storageArea: localStorage
+                }));
+                
+                console.log(`✅ Activity force-synced across all admin accounts`);
+                
+            } catch (error) {
+                console.error('Force activity sync error:', error);
+            }
+        }
+        
         // Enhanced sync monitoring with device awareness
         function startSyncMonitoring() {
             if (syncInterval) clearInterval(syncInterval);
             
             console.log(`🔄 Starting cross-device sync monitoring (Device: ${deviceId})`);
             
+            // Listen for immediate activity updates
+            window.addEventListener('forceActivityUpdate', function(event) {
+                const { activity, fullActivityLog, deviceId: sourceDevice } = event.detail;
+                
+                if (sourceDevice !== deviceId && currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                    console.log(`📨 Received immediate activity update: ${activity.type} by ${activity.tutor}`);
+                    activityLog = fullActivityLog;
+                    localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                    updateAdminActivity();
+                    updateAdminDashboard();
+                    showSyncNotification();
+                }
+            });
+            
+            // Listen for BroadcastChannel activity updates
+            if (typeof BroadcastChannel !== 'undefined') {
+                const activityChannel = new BroadcastChannel('hkbu_activity_channel');
+                activityChannel.addEventListener('message', function(event) {
+                    const { type, activity, fullActivityLog, deviceId: sourceDevice } = event.data;
+                    
+                    if (type === 'newActivity' && sourceDevice !== deviceId && currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                        console.log(`📨 BroadcastChannel activity update: ${activity.type} by ${activity.tutor}`);
+                        activityLog = fullActivityLog;
+                        localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                        updateAdminActivity();
+                        updateAdminDashboard();
+                        showSyncNotification();
+                    }
+                });
+            }
+            
             // More frequent checking for better real-time sync
             syncInterval = setInterval(() => {
                 checkForUpdates();
+                
+                // Check for immediate activity updates
+                checkForImmediateActivityUpdates();
                 
                 // Also periodically announce this device's presence
                 announceDevicePresence();
@@ -995,6 +1090,54 @@
             
             // Initial check
             checkForUpdates();
+        }
+        
+        // Check for immediate activity updates
+        function checkForImmediateActivityUpdates() {
+            try {
+                // Check for immediate activity updates
+                const immediateUpdate = localStorage.getItem('GLOBAL_ACTIVITY_IMMEDIATE');
+                if (immediateUpdate) {
+                    const updateData = JSON.parse(immediateUpdate);
+                    const sourceDevice = updateData.deviceId;
+                    
+                    if (sourceDevice !== deviceId && currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                        const localTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
+                        
+                        if (updateData.timestamp > localTimestamp) {
+                            console.log(`📥 Found immediate activity update from device ${sourceDevice}`);
+                            activityLog = updateData.data;
+                            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                            localStorage.setItem('activityLog_timestamp', updateData.timestamp.toString());
+                            updateAdminActivity();
+                            updateAdminDashboard();
+                        }
+                    }
+                }
+                
+                // Check sessionStorage for latest updates
+                const latestUpdate = sessionStorage.getItem('LATEST_ACTIVITY_UPDATE');
+                if (latestUpdate) {
+                    const updateData = JSON.parse(latestUpdate);
+                    const sourceDevice = updateData.deviceId;
+                    
+                    if (sourceDevice !== deviceId && currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                        const localTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
+                        
+                        if (updateData.timestamp > localTimestamp) {
+                            console.log(`📥 Found session activity update from device ${sourceDevice}`);
+                            activityLog = updateData.data;
+                            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                            localStorage.setItem('activityLog_timestamp', updateData.timestamp.toString());
+                            updateAdminActivity();
+                            updateAdminDashboard();
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Error checking immediate activity updates:', error);
+            }
         }
         
         // Stop sync monitoring
@@ -2728,6 +2871,9 @@
             activityLog.unshift(activity);
             updateCentralData('activityLog', activityLog);
             
+            // Force immediate sync to all admin accounts
+            forceActivitySync(activity);
+            
             // Save to monthly storage
             saveToMonthlyStorage(activity);
             
@@ -2782,6 +2928,9 @@
             
             activityLog.unshift(activity);
             updateCentralData('activityLog', activityLog);
+            
+            // Force immediate sync to all admin accounts
+            forceActivitySync(activity);
             
             // Save to monthly storage
             saveToMonthlyStorage(activity);
@@ -2939,9 +3088,24 @@
             updateAdminActivity();
         }
 
-        // Update admin activity feed
+        // Update admin activity feed with real-time sync
         function updateAdminActivity() {
             const adminActivityDiv = document.getElementById('adminActivity');
+            
+            // Get the most recent activity data from cloud storage
+            const cloudActivityData = getCloudData('activityLog');
+            if (cloudActivityData && Array.isArray(cloudActivityData)) {
+                // Use cloud data if it's more recent
+                const cloudTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
+                const localTimestamp = parseInt(localStorage.getItem('activityLog_local_timestamp') || '0');
+                
+                if (cloudTimestamp > localTimestamp) {
+                    activityLog = cloudActivityData;
+                    localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                    localStorage.setItem('activityLog_local_timestamp', cloudTimestamp.toString());
+                }
+            }
+            
             adminActivityDiv.innerHTML = '';
             
             if (activityLog.length === 0) {
@@ -2949,7 +3113,10 @@
                 return;
             }
             
-            activityLog.slice(0, 50).forEach(activity => {
+            // Sort activities by time (newest first) to ensure proper order
+            const sortedActivities = [...activityLog].sort((a, b) => new Date(b.time) - new Date(a.time));
+            
+            sortedActivities.slice(0, 50).forEach(activity => {
                 const activityItem = document.createElement('div');
                 activityItem.className = 'bg-gray-50 rounded-lg p-4 border-l-4 border-purple-500';
                 
@@ -2974,6 +3141,32 @@
                 
                 adminActivityDiv.appendChild(activityItem);
             });
+        }
+        
+        // Manual refresh function for admin activity
+        function refreshAdminActivity() {
+            console.log('🔄 Manually refreshing admin activity feed...');
+            
+            // Force check for updates from all devices
+            checkForUpdates();
+            
+            // Update the activity feed
+            updateAdminActivity();
+            updateAdminDashboard();
+            
+            // Show refresh notification
+            showNotification('success', 'Activity Refreshed', 'Activity feed has been updated with latest data from all devices');
+            
+            // Visual feedback on refresh button
+            const refreshBtn = document.querySelector('[onclick="refreshAdminActivity()"]');
+            if (refreshBtn) {
+                const originalText = refreshBtn.innerHTML;
+                refreshBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 20 20"><path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/></svg> Refreshing...';
+                
+                setTimeout(() => {
+                    refreshBtn.innerHTML = originalText;
+                }, 1000);
+            }
         }
 
         // Download user's own records as Excel
@@ -3255,8 +3448,96 @@
             showNotification('info', 'Logged Out', 'You have been successfully logged out');
         }
 
+        // Add Enter key functionality for login
+        function setupEnterKeyLogin() {
+            // Biometric login Enter key
+            const tutorIdBio = document.getElementById('tutorIdBio');
+            if (tutorIdBio) {
+                tutorIdBio.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        biometricLogin();
+                    }
+                });
+            }
+            
+            // Password login Enter key
+            const tutorIdPass = document.getElementById('tutorIdPass');
+            const passwordField = document.getElementById('password');
+            
+            if (tutorIdPass) {
+                tutorIdPass.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        // Focus on password field if empty, otherwise login
+                        if (!passwordField.value) {
+                            passwordField.focus();
+                        } else {
+                            passwordLogin();
+                        }
+                    }
+                });
+            }
+            
+            if (passwordField) {
+                passwordField.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        passwordLogin();
+                    }
+                });
+            }
+            
+            // Modal Enter key functionality
+            const findIdEmail = document.getElementById('findIdEmail');
+            if (findIdEmail) {
+                findIdEmail.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        findId();
+                    }
+                });
+            }
+            
+            const resetEmail = document.getElementById('resetEmail');
+            if (resetEmail) {
+                resetEmail.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        resetPassword();
+                    }
+                });
+            }
+            
+            // Change password modal Enter key
+            const currentPassword = document.getElementById('currentPassword');
+            const newPassword = document.getElementById('newPassword');
+            const confirmPassword = document.getElementById('confirmPassword');
+            
+            [currentPassword, newPassword, confirmPassword].forEach(field => {
+                if (field) {
+                    field.addEventListener('keypress', function(event) {
+                        if (event.key === 'Enter') {
+                            event.preventDefault();
+                            // Move to next field or submit if last field
+                            if (field === currentPassword && !newPassword.value) {
+                                newPassword.focus();
+                            } else if (field === newPassword && !confirmPassword.value) {
+                                confirmPassword.focus();
+                            } else {
+                                changePassword();
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
         // Initialize the system when page loads
-        window.onload = init;
+        window.onload = function() {
+            init();
+            setupEnterKeyLogin();
+        };
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966267ed84d0dd4f',t:'MTc1MzY4NTA0NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9662761c7785d50d',t:'MTc1MzY4NTYyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
