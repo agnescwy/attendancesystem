@@ -128,36 +128,8 @@
                 <p class="text-gray-600">Secure authentication portal</p>
             </div>
             
-            <!-- Login Method Selection -->
-            <div class="mb-6">
-                <div class="flex space-x-2 bg-gray-100 rounded-lg p-1">
-                    <button onclick="switchLoginMethod('biometric')" id="biometricTab" 
-                            class="flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm">
-                        Biometric
-                    </button>
-                    <button onclick="switchLoginMethod('password')" id="passwordTab"
-                            class="flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800">
-                        ID & Password
-                    </button>
-                </div>
-            </div>
-
-            <!-- Biometric Login -->
-            <div id="biometricLogin" class="space-y-4">
-                <input type="text" id="tutorIdBio" placeholder="User ID or HKBU Email" 
-                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
-                
-                <button onclick="biometricLogin()" 
-                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center space-x-2">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2z"/>
-                    </svg>
-                    <span>Login with Biometrics</span>
-                </button>
-            </div>
-
             <!-- Password Login -->
-            <div id="passwordLogin" class="hidden space-y-4">
+            <div id="passwordLogin" class="space-y-4">
                 <input type="text" id="tutorIdPass" placeholder="User ID or HKBU Email" 
                        class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                 
@@ -408,20 +380,28 @@
             </div>
 
             <div class="bg-white rounded-2xl card-shadow p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-semibold text-gray-800">Live Activity Feed</h3>
-                    <div class="flex space-x-3">
-                        <button onclick="refreshAdminActivity()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+                <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 space-y-3 sm:space-y-0">
+                    <div class="flex items-center space-x-3">
+                        <h3 class="text-xl font-semibold text-gray-800">Live Activity Feed</h3>
+                        <button onclick="refreshAdminActivity()" id="refreshActivityBtn" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg flex items-center space-x-2 text-sm">
                             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/>
                             </svg>
-                            <span>Refresh Activity</span>
+                            <span>Refresh</span>
                         </button>
-                        <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                        <div class="text-sm text-gray-500">
+                            <span id="lastSyncTime">Last sync: Never</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
                             Export to Excel
                         </button>
-                        <button onclick="clearOldData()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg">
+                        <button onclick="clearOldData()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm">
                             Archive Old Data
+                        </button>
+                        <button onclick="toggleDeleteMode()" id="deleteToggleBtn" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm">
+                            Enable Delete Mode
                         </button>
                     </div>
                 </div>
@@ -572,6 +552,7 @@
         let userLocation = null;
         let activityLog = JSON.parse(localStorage.getItem('activityLog') || '[]');
         let userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        let deleteMode = false;
         
         // Real cross-device cloud sync system using multiple storage methods
         let syncInterval = null;
@@ -586,30 +567,93 @@
             return id;
         }
         
-        // Real cloud storage using multiple persistence methods
+        // Enhanced cloud storage using multiple persistence methods with better discovery
         function getCloudData(key) {
             try {
+                let bestData = null;
+                let bestTimestamp = 0;
+                
                 // Method 1: Try IndexedDB simulation using localStorage with global keys
                 const globalKey = `GLOBAL_${cloudSyncKey}_${key}`;
                 let cloudData = localStorage.getItem(globalKey);
                 
-                if (!cloudData) {
-                    // Method 2: Try sessionStorage for cross-tab sync
-                    cloudData = sessionStorage.getItem(globalKey);
+                if (cloudData) {
+                    try {
+                        const parsed = JSON.parse(cloudData);
+                        const timestamp = parsed.timestamp || 0;
+                        if (timestamp > bestTimestamp) {
+                            bestData = parsed;
+                            bestTimestamp = timestamp;
+                        }
+                    } catch (e) {}
                 }
                 
-                if (!cloudData) {
-                    // Method 3: Try to get from any available storage
-                    for (let i = 0; i < localStorage.length; i++) {
-                        const storageKey = localStorage.key(i);
-                        if (storageKey && storageKey.includes(`${cloudSyncKey}_${key}`)) {
-                            cloudData = localStorage.getItem(storageKey);
-                            break;
+                // Method 2: Try sessionStorage for cross-tab sync
+                cloudData = sessionStorage.getItem(globalKey);
+                if (cloudData) {
+                    try {
+                        const parsed = JSON.parse(cloudData);
+                        const timestamp = parsed.timestamp || 0;
+                        if (timestamp > bestTimestamp) {
+                            bestData = parsed;
+                            bestTimestamp = timestamp;
                         }
+                    } catch (e) {}
+                }
+                
+                // Method 3: Scan all localStorage keys for this data type
+                for (let i = 0; i < localStorage.length; i++) {
+                    const storageKey = localStorage.key(i);
+                    if (storageKey && storageKey.includes(`${cloudSyncKey}_${key}`)) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(storageKey));
+                            const timestamp = data.timestamp || 0;
+                            if (timestamp > bestTimestamp) {
+                                bestData = data;
+                                bestTimestamp = timestamp;
+                            }
+                        } catch (e) {}
                     }
                 }
                 
-                return cloudData ? JSON.parse(cloudData) : null;
+                // Method 4: Check for immediate updates
+                const immediateKey = `IMMEDIATE_${key}_UPDATE`;
+                cloudData = localStorage.getItem(immediateKey);
+                if (cloudData) {
+                    try {
+                        const parsed = JSON.parse(cloudData);
+                        const timestamp = parsed.timestamp || 0;
+                        if (timestamp > bestTimestamp) {
+                            bestData = parsed;
+                            bestTimestamp = timestamp;
+                        }
+                    } catch (e) {}
+                }
+                
+                // Method 5: Try shared storage keys (for cross-computer sync)
+                const sharedKeys = [
+                    `SHARED_${key}`,
+                    `SYNC_${key}`,
+                    `CLOUD_${key}`,
+                    `UNIVERSAL_${key}`,
+                    `CROSS_DEVICE_${key}`
+                ];
+                
+                sharedKeys.forEach(sharedKey => {
+                    try {
+                        cloudData = localStorage.getItem(sharedKey);
+                        if (cloudData) {
+                            const parsed = JSON.parse(cloudData);
+                            const timestamp = parsed.timestamp || 0;
+                            if (timestamp > bestTimestamp) {
+                                bestData = parsed;
+                                bestTimestamp = timestamp;
+                            }
+                        }
+                    } catch (e) {}
+                });
+                
+                return bestData;
             } catch (error) {
                 console.error('Error getting cloud data:', error);
                 return null;
@@ -637,7 +681,30 @@
                 localStorage.setItem(`${cloudSyncKey}_${key}_${deviceId}`, JSON.stringify(dataWithMeta));
                 localStorage.setItem(`${cloudSyncKey}_${key}_latest`, JSON.stringify(dataWithMeta));
                 
-                // Method 4: Broadcast to all windows/tabs
+                // Method 4: Save immediate update for faster discovery
+                localStorage.setItem(`IMMEDIATE_${key}_UPDATE`, JSON.stringify(dataWithMeta));
+                
+                // Method 5: Save with timestamp-based key for chronological ordering
+                localStorage.setItem(`${cloudSyncKey}_${key}_${timestamp}`, JSON.stringify(dataWithMeta));
+                
+                // Method 6: Save with shared keys for cross-computer sync
+                const sharedKeys = [
+                    `SHARED_${key}`,
+                    `SYNC_${key}`,
+                    `CLOUD_${key}`,
+                    `UNIVERSAL_${key}`,
+                    `CROSS_DEVICE_${key}`
+                ];
+                
+                sharedKeys.forEach(sharedKey => {
+                    try {
+                        localStorage.setItem(sharedKey, JSON.stringify(dataWithMeta));
+                    } catch (e) {
+                        console.log(`Failed to save to ${sharedKey}`);
+                    }
+                });
+                
+                // Method 7: Broadcast to all windows/tabs
                 try {
                     window.dispatchEvent(new CustomEvent('cloudDataUpdate', { 
                         detail: { key, data, timestamp, deviceId } 
@@ -658,7 +725,7 @@
                     console.log('Broadcast failed, using fallback sync');
                 }
                 
-                // Method 5: Use storage event for cross-window sync
+                // Method 8: Use storage event for cross-window sync
                 try {
                     window.dispatchEvent(new StorageEvent('storage', {
                         key: globalKey,
@@ -669,7 +736,11 @@
                     console.log('Storage event failed');
                 }
                 
-                console.log(`🌐 Data synced to cloud: ${key} from device ${deviceId}`);
+                // Method 9: Save to a universal sync key that all devices check
+                const universalSyncKey = `HKBU_UNIVERSAL_SYNC_${key}`;
+                localStorage.setItem(universalSyncKey, JSON.stringify(dataWithMeta));
+                
+                console.log(`🌐 Data synced to cloud: ${key} from device ${deviceId} at ${new Date(timestamp).toLocaleTimeString()}`);
                 return true;
             } catch (error) {
                 console.error('Error setting cloud data:', error);
@@ -897,54 +968,95 @@
             });
         }
         
-        // Sync all data from central storage
+        // Enhanced sync all data from both local and cloud storage
         function syncAllData() {
-            // Sync user data
-            const newUserData = JSON.parse(localStorage.getItem('userData') || '{}');
-            if (JSON.stringify(newUserData) !== JSON.stringify(userData)) {
-                userData = newUserData;
-                if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                    updateAdminDashboard();
-                    // Refresh any open modals
-                    if (!document.getElementById('manageUsersModal').classList.contains('hidden')) {
-                        populateUsersList();
+            let hasUpdates = false;
+            
+            // Sync user data from cloud
+            const cloudUserData = getCloudData('userData');
+            if (cloudUserData) {
+                const cloudData = cloudUserData.data || cloudUserData;
+                const cloudTimestamp = cloudUserData.timestamp || 0;
+                const localTimestamp = parseInt(localStorage.getItem('userData_timestamp') || '0');
+                
+                if (cloudTimestamp > localTimestamp && JSON.stringify(cloudData) !== JSON.stringify(userData)) {
+                    userData = cloudData;
+                    localStorage.setItem('userData', JSON.stringify(userData));
+                    localStorage.setItem('userData_timestamp', cloudTimestamp.toString());
+                    hasUpdates = true;
+                    
+                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                        updateAdminDashboard();
+                        refreshOpenModals();
                     }
-                    if (!document.getElementById('manageAdminsModal').classList.contains('hidden')) {
-                        populateAdminsList();
+                }
+            }
+            
+            // Sync school list from cloud
+            const cloudSchoolList = getCloudData('schoolList');
+            if (cloudSchoolList) {
+                const cloudData = cloudSchoolList.data || cloudSchoolList;
+                const cloudTimestamp = cloudSchoolList.timestamp || 0;
+                const localTimestamp = parseInt(localStorage.getItem('schoolList_timestamp') || '0');
+                
+                if (cloudTimestamp > localTimestamp && JSON.stringify(cloudData) !== JSON.stringify(schoolList)) {
+                    schoolList = cloudData;
+                    localStorage.setItem('schoolList', JSON.stringify(schoolList));
+                    localStorage.setItem('schoolList_timestamp', cloudTimestamp.toString());
+                    updateSchoolDropdown();
+                    hasUpdates = true;
+                    
+                    if (!document.getElementById('manageSchoolsModal').classList.contains('hidden')) {
+                        populateSchoolsList();
                     }
                 }
             }
             
-            // Sync school list
-            const newSchoolList = JSON.parse(localStorage.getItem('schoolList') || '[]');
-            if (JSON.stringify(newSchoolList) !== JSON.stringify(schoolList)) {
-                schoolList = newSchoolList;
-                updateSchoolDropdown();
-                if (!document.getElementById('manageSchoolsModal').classList.contains('hidden')) {
-                    populateSchoolsList();
+            // Sync lesson types from cloud
+            const cloudLessonTypes = getCloudData('lessonTypes');
+            if (cloudLessonTypes) {
+                const cloudData = cloudLessonTypes.data || cloudLessonTypes;
+                const cloudTimestamp = cloudLessonTypes.timestamp || 0;
+                const localTimestamp = parseInt(localStorage.getItem('lessonTypes_timestamp') || '0');
+                
+                if (cloudTimestamp > localTimestamp && JSON.stringify(cloudData) !== JSON.stringify(lessonTypes)) {
+                    lessonTypes = cloudData;
+                    localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
+                    localStorage.setItem('lessonTypes_timestamp', cloudTimestamp.toString());
+                    updateLessonTypeDropdown();
+                    hasUpdates = true;
+                    
+                    if (!document.getElementById('manageLessonsModal').classList.contains('hidden')) {
+                        populateLessonTypesList();
+                    }
                 }
             }
             
-            // Sync lesson types
-            const newLessonTypes = JSON.parse(localStorage.getItem('lessonTypes') || '[]');
-            if (JSON.stringify(newLessonTypes) !== JSON.stringify(lessonTypes)) {
-                lessonTypes = newLessonTypes;
-                updateLessonTypeDropdown();
-                if (!document.getElementById('manageLessonsModal').classList.contains('hidden')) {
-                    populateLessonTypesList();
+            // Sync activity log from cloud
+            const cloudActivityLog = getCloudData('activityLog');
+            if (cloudActivityLog) {
+                const cloudData = cloudActivityLog.data || cloudActivityLog;
+                const cloudTimestamp = cloudActivityLog.timestamp || 0;
+                const localTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
+                
+                if (cloudTimestamp > localTimestamp && JSON.stringify(cloudData) !== JSON.stringify(activityLog)) {
+                    activityLog = cloudData;
+                    localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                    localStorage.setItem('activityLog_timestamp', cloudTimestamp.toString());
+                    hasUpdates = true;
+                    
+                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                        updateAdminActivity();
+                        updateAdminDashboard();
+                    } else if (currentUser && currentUser.role === 'tutor') {
+                        loadRecentActivity();
+                    }
                 }
             }
             
-            // Sync activity log
-            const newActivityLog = JSON.parse(localStorage.getItem('activityLog') || '[]');
-            if (JSON.stringify(newActivityLog) !== JSON.stringify(activityLog)) {
-                activityLog = newActivityLog;
-                if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                    updateAdminActivity();
-                    updateAdminDashboard();
-                } else if (currentUser && currentUser.role === 'tutor') {
-                    loadRecentActivity();
-                }
+            // Show sync notification if there were updates
+            if (hasUpdates) {
+                console.log('✅ Data synchronized from cloud storage');
             }
         }
         
@@ -1084,9 +1196,17 @@
                 // Check for immediate activity updates
                 checkForImmediateActivityUpdates();
                 
+                // Force sync all data types periodically
+                if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                    syncAllData();
+                }
+                
                 // Also periodically announce this device's presence
                 announceDevicePresence();
-            }, 1500); // Check every 1.5 seconds
+                
+                // Additional cross-computer sync check
+                checkUniversalSyncKeys();
+            }, 500); // Check every 0.5 seconds for better responsiveness
             
             // Initial check
             checkForUpdates();
@@ -1149,6 +1269,38 @@
             }
         }
         
+        // Check universal sync keys for cross-computer sync
+        function checkUniversalSyncKeys() {
+            try {
+                const dataTypes = ['userData', 'schoolList', 'lessonTypes', 'activityLog'];
+                
+                dataTypes.forEach(dataType => {
+                    const universalKey = `HKBU_UNIVERSAL_SYNC_${dataType}`;
+                    const universalData = localStorage.getItem(universalKey);
+                    
+                    if (universalData) {
+                        try {
+                            const parsed = JSON.parse(universalData);
+                            const cloudTimestamp = parsed.timestamp || 0;
+                            const sourceDevice = parsed.deviceId || 'unknown';
+                            const localTimestamp = parseInt(localStorage.getItem(`${dataType}_timestamp`) || '0');
+                            
+                            // Only sync if from different device and newer
+                            if (sourceDevice !== deviceId && cloudTimestamp > localTimestamp) {
+                                console.log(`🔄 Universal sync: ${dataType} from device ${sourceDevice}`);
+                                syncDataType(dataType, parsed.data, cloudTimestamp);
+                                showSyncNotification();
+                            }
+                        } catch (error) {
+                            console.error(`Error parsing universal sync data for ${dataType}:`, error);
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Error checking universal sync keys:', error);
+            }
+        }
+        
         // Announce device presence to help with discovery
         function announceDevicePresence() {
             try {
@@ -1161,11 +1313,14 @@
                 
                 localStorage.setItem(`device_presence_${deviceId}`, JSON.stringify(presence));
                 
+                // Also save to universal presence key for cross-computer discovery
+                localStorage.setItem(`HKBU_UNIVERSAL_PRESENCE_${deviceId}`, JSON.stringify(presence));
+                
                 // Clean up old presence data (older than 30 seconds)
                 const thirtySecondsAgo = Date.now() - 30000;
                 for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
-                    if (key && key.startsWith('device_presence_')) {
+                    if (key && (key.startsWith('device_presence_') || key.startsWith('HKBU_UNIVERSAL_PRESENCE_'))) {
                         try {
                             const data = JSON.parse(localStorage.getItem(key));
                             if (data.timestamp < thirtySecondsAgo) {
@@ -1206,8 +1361,8 @@
             }
             return allData.sort((a, b) => new Date(b.time) - new Date(a.time));
         }
-        let schoolList = JSON.parse(localStorage.getItem('schoolList') || '["Lok Wah (LW)", "Sze Yap (SY)", "Ta Tung (TT)", "Kei Oi (KO)", "Lui Ming Choi (LMC)", "Queens\' Hill (QHS)", "But San (BS)", "Wai Chow (WC)", "Tang Ying Yip (TYY)", "Lim Kim Tian (LKT)", "Wong Tai Sin (WTS)"]');
-        let lessonTypes = JSON.parse(localStorage.getItem('lessonTypes') || '["Group Class", "Ensemble Class", "School Show", "Rehearsal", "Parents Workshop", "Individual Lesson", "Performance"]');
+        let schoolList = JSON.parse(localStorage.getItem('schoolList') || '["Lok Wah (LW)", "Sze Yap (SY)", "Ta Tung (TT)", "Kei Oi (KO)", "Lui Ming Choi (LMC)", "Queens\' Hill (QHS)", "But San (BS)", "Wai Chow (WC)", "Tang Ying Yip (TYY)", "Lim Kim Tian (LKT)", "Wong Tai Sin (WTS)", "HKBU (BU)"]');
+        let lessonTypes = JSON.parse(localStorage.getItem('lessonTypes') || '["Group Class", "Ensemble Class", "School Show", "Rehearsal", "Parents Workshop", "Individual Lesson", "Performance", "Curriculum"]');
 
         // Initialize the system
         function init() {
@@ -1391,6 +1546,14 @@
                     mustChangePassword: true
                 }
             };
+            
+            // Ensure the new school and lesson type are in the lists
+            if (!schoolList.includes('HKBU (BU)')) {
+                schoolList.push('HKBU (BU)');
+            }
+            if (!lessonTypes.includes('Curriculum')) {
+                lessonTypes.push('Curriculum');
+            }
             
             // Save to both local storage and cloud
             updateCentralData('userData', userData);
@@ -1836,135 +1999,7 @@
             document.body.removeChild(textArea);
         }
 
-        // Switch login method
-        function switchLoginMethod(method) {
-            const biometricTab = document.getElementById('biometricTab');
-            const passwordTab = document.getElementById('passwordTab');
-            const biometricLogin = document.getElementById('biometricLogin');
-            const passwordLogin = document.getElementById('passwordLogin');
 
-            if (method === 'biometric') {
-                biometricTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm';
-                passwordTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800';
-                biometricLogin.classList.remove('hidden');
-                passwordLogin.classList.add('hidden');
-            } else {
-                passwordTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm';
-                biometricTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800';
-                passwordLogin.classList.remove('hidden');
-                biometricLogin.classList.add('hidden');
-            }
-        }
-
-        // Real biometric login with WebAuthn API
-        async function biometricLogin() {
-            const tutorId = document.getElementById('tutorIdBio').value;
-            if (!tutorId) {
-                document.getElementById('loginStatus').innerHTML = 
-                    '<span class="text-red-600">Please enter your User ID or HKBU Email</span>';
-                return;
-            }
-
-            // Show biometric authentication steps
-            document.getElementById('loginStatus').innerHTML = 
-                '<span class="text-blue-600 pulse-animation">🔍 Looking up user account...</span>';
-
-            setTimeout(async () => {
-                const user = findUserByIdOrEmail(tutorId);
-                if (!user) {
-                    document.getElementById('loginStatus').innerHTML = 
-                        '<span class="text-red-600">❌ User not found in system</span>';
-                    return;
-                }
-
-                document.getElementById('loginStatus').innerHTML = 
-                    '<span class="text-blue-600 pulse-animation">👤 User found: ' + user.name + '</span>';
-
-                setTimeout(async () => {
-                    document.getElementById('loginStatus').innerHTML = 
-                        '<span class="text-blue-600 pulse-animation">🔐 Requesting biometric authentication...</span>';
-
-                    try {
-                        // Check if WebAuthn is supported
-                        if (!window.PublicKeyCredential) {
-                            throw new Error('WebAuthn not supported');
-                        }
-
-                        // Check if biometric authentication is available
-                        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-                        if (!available) {
-                            throw new Error('Biometric authentication not available');
-                        }
-
-                        document.getElementById('loginStatus').innerHTML = 
-                            '<span class="text-blue-600 pulse-animation">📱 Please use your fingerprint, face ID, or device PIN...</span>';
-
-                        // Create credential request options
-                        const challenge = new Uint8Array(32);
-                        crypto.getRandomValues(challenge);
-
-                        const credentialRequestOptions = {
-                            challenge: challenge,
-                            timeout: 60000,
-                            userVerification: 'required',
-                            allowCredentials: [{
-                                id: new TextEncoder().encode(user.id),
-                                type: 'public-key',
-                                transports: ['internal']
-                            }]
-                        };
-
-                        // Request biometric authentication
-                        const credential = await navigator.credentials.get({
-                            publicKey: credentialRequestOptions
-                        });
-
-                        if (credential) {
-                            document.getElementById('loginStatus').innerHTML = 
-                                '<span class="text-green-600">✅ Biometric authentication successful!</span>';
-
-                            setTimeout(() => {
-                                loginUser(user);
-                            }, 1000);
-                        } else {
-                            throw new Error('Authentication failed');
-                        }
-
-                    } catch (error) {
-                        console.log('Biometric auth error:', error);
-                        
-                        if (error.name === 'NotAllowedError') {
-                            document.getElementById('loginStatus').innerHTML = 
-                                '<span class="text-red-600">❌ Biometric authentication cancelled or failed</span>';
-                        } else if (error.message.includes('not supported') || error.message.includes('not available')) {
-                            // Fallback to device authentication simulation
-                            document.getElementById('loginStatus').innerHTML = 
-                                '<span class="text-orange-600">⚠️ Hardware biometrics unavailable. Using device authentication...</span>';
-                            
-                            setTimeout(() => {
-                                // Simulate device PIN/password prompt
-                                const deviceAuth = confirm('Please authenticate using your device PIN, password, or pattern to continue.');
-                                
-                                if (deviceAuth) {
-                                    document.getElementById('loginStatus').innerHTML = 
-                                        '<span class="text-green-600">✅ Device authentication successful!</span>';
-                                    
-                                    setTimeout(() => {
-                                        loginUser(user);
-                                    }, 1000);
-                                } else {
-                                    document.getElementById('loginStatus').innerHTML = 
-                                        '<span class="text-red-600">❌ Authentication cancelled</span>';
-                                }
-                            }, 1500);
-                        } else {
-                            document.getElementById('loginStatus').innerHTML = 
-                                '<span class="text-red-600">❌ Biometric authentication failed. Please try again or use password login.</span>';
-                        }
-                    }
-                }, 1500);
-            }, 800);
-        }
 
         // Password login
         function passwordLogin() {
@@ -3088,19 +3123,19 @@
             updateAdminActivity();
         }
 
-        // Update admin activity feed with real-time sync
+        // Update admin activity feed with real-time sync and delete functionality
         function updateAdminActivity() {
             const adminActivityDiv = document.getElementById('adminActivity');
             
             // Get the most recent activity data from cloud storage
             const cloudActivityData = getCloudData('activityLog');
-            if (cloudActivityData && Array.isArray(cloudActivityData)) {
-                // Use cloud data if it's more recent
-                const cloudTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
+            if (cloudActivityData && Array.isArray(cloudActivityData.data || cloudActivityData)) {
+                const cloudData = cloudActivityData.data || cloudActivityData;
+                const cloudTimestamp = cloudActivityData.timestamp || parseInt(localStorage.getItem('activityLog_timestamp') || '0');
                 const localTimestamp = parseInt(localStorage.getItem('activityLog_local_timestamp') || '0');
                 
                 if (cloudTimestamp > localTimestamp) {
-                    activityLog = cloudActivityData;
+                    activityLog = cloudData;
                     localStorage.setItem('activityLog', JSON.stringify(activityLog));
                     localStorage.setItem('activityLog_local_timestamp', cloudTimestamp.toString());
                 }
@@ -3118,7 +3153,15 @@
             
             sortedActivities.slice(0, 50).forEach(activity => {
                 const activityItem = document.createElement('div');
-                activityItem.className = 'bg-gray-50 rounded-lg p-4 border-l-4 border-purple-500';
+                const borderColor = deleteMode ? 'border-red-500' : 'border-purple-500';
+                const bgColor = deleteMode ? 'bg-red-50 hover:bg-red-100 cursor-pointer' : 'bg-gray-50';
+                
+                activityItem.className = `${bgColor} rounded-lg p-4 border-l-4 ${borderColor} transition-colors duration-200`;
+                
+                if (deleteMode) {
+                    activityItem.onclick = () => deleteActivity(activity.id);
+                    activityItem.title = 'Click to delete this activity';
+                }
                 
                 const icon = activity.type === 'check-in' ? '🟢' : '🔴';
                 const actionText = activity.type === 'check-in' ? 'checked in' : 'checked out';
@@ -3126,31 +3169,115 @@
                 activityItem.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div class="flex-1">
-                            <p class="font-medium text-gray-800">${icon} ${activity.tutor} ${actionText}</p>
+                            <div class="flex items-center space-x-2">
+                                <p class="font-medium text-gray-800">${icon} ${activity.tutor} ${actionText}</p>
+                                ${deleteMode ? '<span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Click to Delete</span>' : ''}
+                            </div>
                             <p class="text-sm text-gray-600">${activity.school} - ${activity.lessonType}</p>
                             <p class="text-xs text-gray-500">${activity.timeDisplay} • ${activity.location}</p>
                             <p class="text-xs text-gray-400">${activity.coordinates}</p>
                             ${activity.isSubstitute ? '<span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded mt-1 inline-block">Substitute</span>' : ''}
                             ${activity.duration ? `<p class="text-xs text-gray-500 mt-1">Duration: ${activity.duration}</p>` : ''}
                         </div>
-                        <div class="text-xs text-gray-400">
-                            ID: ${activity.sessionId || activity.id}
+                        <div class="flex flex-col items-end space-y-1">
+                            <div class="text-xs text-gray-400">
+                                ID: ${activity.sessionId || activity.id}
+                            </div>
+                            ${deleteMode ? `<button onclick="event.stopPropagation(); deleteActivity(${activity.id})" class="text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded">🗑️ Delete</button>` : ''}
                         </div>
                     </div>
                 `;
                 
                 adminActivityDiv.appendChild(activityItem);
             });
+            
+            // Update last sync time
+            const lastSyncElement = document.getElementById('lastSyncTime');
+            if (lastSyncElement) {
+                lastSyncElement.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            }
         }
         
-        // Manual refresh function for admin activity
+        // Toggle delete mode for activity items
+        function toggleDeleteMode() {
+            deleteMode = !deleteMode;
+            const toggleBtn = document.getElementById('deleteToggleBtn');
+            
+            if (deleteMode) {
+                toggleBtn.textContent = 'Disable Delete Mode';
+                toggleBtn.className = 'bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm';
+                showNotification('info', 'Delete Mode Enabled', 'Click on any activity item to delete it');
+            } else {
+                toggleBtn.textContent = 'Enable Delete Mode';
+                toggleBtn.className = 'bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm';
+                showNotification('info', 'Delete Mode Disabled', 'Activity items are now protected from deletion');
+            }
+            
+            // Refresh the activity feed to show/hide delete buttons
+            updateAdminActivity();
+        }
+        
+        // Delete activity item
+        function deleteActivity(activityId) {
+            if (!deleteMode) {
+                showNotification('error', 'Delete Mode Disabled', 'Enable delete mode first to delete activities');
+                return;
+            }
+            
+            const activity = activityLog.find(a => a.id === activityId);
+            if (!activity) {
+                showNotification('error', 'Activity Not Found', 'This activity no longer exists');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete this activity?\n\n${activity.tutor} - ${activity.type} at ${activity.school}\nTime: ${activity.timeDisplay}\n\nThis action cannot be undone.`)) {
+                return;
+            }
+            
+            // Remove from activity log
+            activityLog = activityLog.filter(a => a.id !== activityId);
+            
+            // Update central data and sync to all devices
+            updateCentralData('activityLog', activityLog);
+            
+            // Force sync to all admin accounts
+            forceActivitySync({
+                type: 'activity_deleted',
+                deletedId: activityId,
+                deletedBy: currentUser.name,
+                timestamp: Date.now()
+            });
+            
+            // Update UI
+            updateAdminActivity();
+            updateAdminDashboard();
+            
+            showNotification('success', 'Activity Deleted', `Activity by ${activity.tutor} has been removed and synced to all admin accounts`);
+            
+            // Log the deletion for audit purposes
+            console.log(`🗑️ Activity deleted by ${currentUser.name}:`, activity);
+        }
+
+        // Enhanced manual refresh function for admin activity
         function refreshAdminActivity() {
             console.log('🔄 Manually refreshing admin activity feed...');
             
-            // Force check for updates from all devices
+            // Update last sync time display
+            const lastSyncElement = document.getElementById('lastSyncTime');
+            if (lastSyncElement) {
+                lastSyncElement.textContent = `Last sync: ${new Date().toLocaleTimeString()}`;
+            }
+            
+            // Force comprehensive check for updates from all devices
             checkForUpdates();
             
-            // Update the activity feed
+            // Also check for immediate activity updates
+            checkForImmediateActivityUpdates();
+            
+            // Force sync all data types
+            syncAllData();
+            
+            // Update the activity feed and dashboard
             updateAdminActivity();
             updateAdminDashboard();
             
@@ -3158,7 +3285,7 @@
             showNotification('success', 'Activity Refreshed', 'Activity feed has been updated with latest data from all devices');
             
             // Visual feedback on refresh button
-            const refreshBtn = document.querySelector('[onclick="refreshAdminActivity()"]');
+            const refreshBtn = document.getElementById('refreshActivityBtn');
             if (refreshBtn) {
                 const originalText = refreshBtn.innerHTML;
                 refreshBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="currentColor" viewBox="0 0 20 20"><path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/></svg> Refreshing...';
@@ -3450,17 +3577,6 @@
 
         // Add Enter key functionality for login
         function setupEnterKeyLogin() {
-            // Biometric login Enter key
-            const tutorIdBio = document.getElementById('tutorIdBio');
-            if (tutorIdBio) {
-                tutorIdBio.addEventListener('keypress', function(event) {
-                    if (event.key === 'Enter') {
-                        event.preventDefault();
-                        biometricLogin();
-                    }
-                });
-            }
-            
             // Password login Enter key
             const tutorIdPass = document.getElementById('tutorIdPass');
             const passwordField = document.getElementById('password');
@@ -3539,5 +3655,5 @@
             setupEnterKeyLogin();
         };
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9662761c7785d50d',t:'MTc1MzY4NTYyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9662c078825003d3',t:'MTc1MzY4ODY3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
