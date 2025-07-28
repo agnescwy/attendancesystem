@@ -1,0 +1,2622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="format-detection" content="telephone=no">
+    <title>HKBU JC Project MuSE Instructors and TAs Attendance System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        input, textarea, select { 
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+        }
+        input[type="checkbox"] {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            cursor: pointer;
+        }
+        label {
+            cursor: pointer;
+        }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-shadow { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .pulse-animation { animation: pulse 2s infinite; }
+        .notification { 
+            position: fixed; 
+            top: 10px; 
+            left: 10px;
+            right: 10px;
+            z-index: 1000;
+            transform: translateY(-100px);
+            transition: transform 0.3s ease-in-out;
+            max-width: none;
+        }
+        .notification.show { transform: translateY(0); }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .location-card {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        }
+        /* Mobile optimizations */
+        @media (max-width: 768px) {
+            .notification {
+                top: 5px;
+                left: 5px;
+                right: 5px;
+            }
+            input, select, button {
+                font-size: 16px !important; /* Prevents zoom on iOS */
+                -webkit-appearance: none;
+                border-radius: 8px;
+            }
+            button {
+                min-height: 48px; /* Touch target size */
+            }
+            .card-shadow {
+                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            }
+        }
+        /* iOS specific fixes */
+        @supports (-webkit-touch-callout: none) {
+            input[type="text"], input[type="email"], input[type="password"], select {
+                -webkit-appearance: none;
+                border-radius: 8px;
+            }
+        }
+        /* Android specific fixes */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+            select {
+                background-image: url("data:image/svg+xml;charset=US-ASCII,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 5'><path fill='%23666' d='M2 0L0 2h4zm0 5L0 3h4z'/></svg>");
+                background-repeat: no-repeat;
+                background-position: right 12px center;
+                background-size: 12px;
+                padding-right: 40px;
+            }
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <!-- Notification Toast -->
+    <div id="notification" class="notification bg-white rounded-lg card-shadow p-4 w-80">
+        <div class="flex items-start space-x-3">
+            <div id="notificationIcon" class="flex-shrink-0 w-6 h-6"></div>
+            <div class="flex-1">
+                <p id="notificationTitle" class="font-semibold text-gray-800"></p>
+                <p id="notificationMessage" class="text-sm text-gray-600"></p>
+            </div>
+            <button onclick="hideNotification()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl card-shadow p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <div class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-10 h-10 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-2">HKBU JC Project MuSE Instructors and TAs Attendance System</h1>
+                <p class="text-gray-600">Secure authentication portal</p>
+            </div>
+            
+            <!-- Login Method Selection -->
+            <div class="mb-6">
+                <div class="flex space-x-2 bg-gray-100 rounded-lg p-1">
+                    <button onclick="switchLoginMethod('biometric')" id="biometricTab" 
+                            class="flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm">
+                        Biometric
+                    </button>
+                    <button onclick="switchLoginMethod('password')" id="passwordTab"
+                            class="flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800">
+                        ID & Password
+                    </button>
+                </div>
+            </div>
+
+            <!-- Biometric Login -->
+            <div id="biometricLogin" class="space-y-4">
+                <input type="text" id="tutorIdBio" placeholder="User ID or HKBU Email" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                
+                <button onclick="biometricLogin()" 
+                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center space-x-2">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2z"/>
+                    </svg>
+                    <span>Login with Biometrics</span>
+                </button>
+            </div>
+
+            <!-- Password Login -->
+            <div id="passwordLogin" class="hidden space-y-4">
+                <input type="text" id="tutorIdPass" placeholder="User ID or HKBU Email" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                
+                <input type="password" id="password" placeholder="Password" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+                
+                <button onclick="passwordLogin()" 
+                        class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200">
+                    Login
+                </button>
+
+                <div class="text-center space-y-2">
+                    <button onclick="showForgotId()" class="text-sm text-purple-600 hover:text-purple-800">
+                        Forgot your ID?
+                    </button>
+                    <span class="text-gray-400">|</span>
+                    <button onclick="showResetPassword()" class="text-sm text-purple-600 hover:text-purple-800">
+                        Reset Password
+                    </button>
+                </div>
+            </div>
+            
+            <div id="loginStatus" class="text-center text-sm mt-4"></div>
+        </div>
+    </div>
+
+    <!-- Forgot ID Modal -->
+    <div id="forgotIdModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-md">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Find Your ID</h3>
+            <p class="text-gray-600 mb-4">Enter your HKBU email to retrieve your User ID</p>
+            <input type="email" id="findIdEmail" placeholder="your.name@hkbu.edu.hk" 
+                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mb-4">
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <button onclick="findId()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg">
+                    Send ID
+                </button>
+                <button onclick="hideForgotId()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 px-4 rounded-lg">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetPasswordModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-md">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">Reset Password</h3>
+            <p class="text-gray-600 mb-4">Enter your HKBU email to reset your password</p>
+            <input type="email" id="resetEmail" placeholder="your.name@hkbu.edu.hk" 
+                   class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mb-4">
+            <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                <button onclick="resetPassword()" class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg">
+                    Send Reset Link
+                </button>
+                <button onclick="hideResetPassword()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 py-3 px-4 rounded-lg">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-md">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-yellow-600" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"/>
+                    </svg>
+                </div>
+                <h3 class="text-xl font-semibold text-gray-800 mb-2">Password Change Required</h3>
+                <p class="text-gray-600 text-sm">For security reasons, you must change your password before continuing.</p>
+            </div>
+            
+            <div class="space-y-4">
+                <input type="password" id="currentPassword" placeholder="Current Password" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                
+                <input type="password" id="newPassword" placeholder="New Password (min 8 characters)" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                
+                <input type="password" id="confirmPassword" placeholder="Confirm New Password" 
+                       class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                
+                <div id="passwordStrength" class="text-sm"></div>
+                
+                <button onclick="changePassword()" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 px-4 rounded-lg font-semibold">
+                    Change Password
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="dashboard" class="hidden min-h-screen p-4">
+        <div class="max-w-4xl mx-auto">
+            <!-- Header -->
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Welcome, <span id="tutorName">Tutor</span></h2>
+                        <p class="text-gray-600" id="currentTime"></p>
+                    </div>
+                    <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
+                        Logout
+                    </button>
+                </div>
+            </div>
+
+            <!-- Location Display -->
+            <div class="location-card rounded-2xl card-shadow p-6 mb-6 text-white">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-semibold">Current Location</h3>
+                        <p id="locationDisplay" class="text-white text-opacity-90">📍 Getting location...</p>
+                        <p id="coordinatesDisplay" class="text-sm text-white text-opacity-70"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Check-in Form -->
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Session Details</h3>
+                
+                <div class="grid md:grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">School</label>
+                        <select id="schoolSelect" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="">Select School</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Lesson Type</label>
+                        <select id="lessonType" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="">Select Lesson Type</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <label class="flex items-center space-x-3 cursor-pointer">
+                        <input type="checkbox" id="substituteClass" class="w-5 h-5 text-purple-600 rounded focus:ring-2 focus:ring-purple-500">
+                        <span class="text-gray-700 select-none">This is a substitute class</span>
+                    </label>
+                </div>
+
+                <!-- Check-in/out Buttons -->
+                <div class="grid md:grid-cols-2 gap-4">
+                    <button onclick="checkIn()" id="checkinBtn"
+                            class="bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-6 rounded-lg transition duration-200 flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/>
+                        </svg>
+                        <span>Check In</span>
+                    </button>
+                    
+                    <button onclick="checkOut()" id="checkoutBtn" disabled
+                            class="bg-gray-400 text-white font-semibold py-4 px-6 rounded-lg transition duration-200 flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"/>
+                        </svg>
+                        <span>Check Out</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Session Status -->
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Current Session</h3>
+                <div id="sessionStatus" class="text-gray-600">
+                    No active session
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white rounded-2xl card-shadow p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Recent Activity</h3>
+                    <button onclick="downloadMyRecords()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                        Download My Records
+                    </button>
+                </div>
+                <div id="recentActivity" class="space-y-3">
+                    <p class="text-gray-600">No recent activity</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="hidden min-h-screen p-4">
+        <div class="max-w-6xl mx-auto">
+            <div class="bg-white rounded-2xl card-shadow p-6 mb-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold text-gray-800">Administrator Dashboard</h2>
+                        <p class="text-gray-600" id="adminEmail">jcprojects@hkbu.edu.hk</p>
+                        <p class="text-sm text-purple-600" id="adminRole">Major Administrator</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="showManageSchools()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                            Manage Schools
+                        </button>
+                        <button onclick="showManageLessons()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                            Manage Lessons
+                        </button>
+                        <button onclick="showManageUsers()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">
+                            Manage Users
+                        </button>
+                        <button onclick="showManageAdmins()" id="manageAdminsBtn" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg hidden">
+                            Manage Admins
+                        </button>
+                        <button onclick="logout()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg">
+                            Logout
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-6 mb-6">
+                <div class="bg-white rounded-xl card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Active Sessions</h3>
+                    <p class="text-3xl font-bold text-green-600" id="activeSessions">0</p>
+                </div>
+                <div class="bg-white rounded-xl card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Today's Check-ins</h3>
+                    <p class="text-3xl font-bold text-blue-600" id="todayCheckins">0</p>
+                </div>
+                <div class="bg-white rounded-xl card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Total Tutors</h3>
+                    <p class="text-3xl font-bold text-purple-600" id="totalTutors">300</p>
+                </div>
+                <div class="bg-white rounded-xl card-shadow p-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-2">Total Schools</h3>
+                    <p class="text-3xl font-bold text-orange-600" id="totalSchools">11</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl card-shadow p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">Live Activity Feed</h3>
+                    <div class="flex space-x-3">
+                        <button onclick="exportToExcel()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                            Export to Excel
+                        </button>
+                        <button onclick="clearOldData()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg">
+                            Archive Old Data
+                        </button>
+                    </div>
+                </div>
+                <div id="adminActivity" class="space-y-3 max-h-96 overflow-y-auto">
+                    <p class="text-gray-600">Waiting for activity...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Schools Modal -->
+    <div id="manageSchoolsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Manage Schools</h3>
+                <button onclick="hideManageSchools()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Add New School -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3">Add New School</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input type="text" id="newSchoolName" placeholder="School Name" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <input type="text" id="newSchoolCode" placeholder="School Code (e.g., ABC)" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <button onclick="addSchool()" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg">
+                        Add School
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Schools List -->
+            <div id="schoolsList" class="space-y-3">
+                <!-- Schools will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Lessons Modal -->
+    <div id="manageLessonsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Manage Lesson Types</h3>
+                <button onclick="hideManageLessons()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Add New Lesson Type -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3">Add New Lesson Type</h4>
+                <div class="flex space-x-3">
+                    <input type="text" id="newLessonType" placeholder="Lesson Type Name" 
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <button onclick="addLessonType()" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg">
+                        Add
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Lesson Types List -->
+            <div id="lessonTypesList" class="space-y-3">
+                <!-- Lesson types will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Users Modal -->
+    <div id="manageUsersModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Manage Tutors</h3>
+                <button onclick="hideManageUsers()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Add New User Form -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3">Add New Tutor</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" id="newTutorName" placeholder="Full Name" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <input type="email" id="newTutorEmail" placeholder="HKBU Email" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <input type="text" id="newTutorId" placeholder="Tutor ID" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <button onclick="addNewTutor()" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg">
+                        Add Tutor
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Users List -->
+            <div id="usersList" class="space-y-3">
+                <!-- Users will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Manage Admins Modal -->
+    <div id="manageAdminsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl card-shadow p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Manage Administrators</h3>
+                <button onclick="hideManageAdmins()" class="text-gray-400 hover:text-gray-600">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Add New Admin Form -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <h4 class="font-semibold text-gray-800 mb-3">Add New Administrator</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input type="text" id="newAdminName" placeholder="Full Name" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <input type="email" id="newAdminEmail" placeholder="HKBU Email" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <input type="text" id="newAdminId" placeholder="Admin ID" 
+                           class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                    <button onclick="addNewAdmin()" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg">
+                        Add Admin
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Admins List -->
+            <div id="adminsList" class="space-y-3">
+                <!-- Admins will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let currentSession = null;
+        let userLocation = null;
+        let activityLog = JSON.parse(localStorage.getItem('activityLog') || '[]');
+        let userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        
+        // Monthly data storage
+        function getMonthlyStorageKey(date = new Date()) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            return `monthlyData_${year}_${month}`;
+        }
+        
+        function saveToMonthlyStorage(activity) {
+            const monthKey = getMonthlyStorageKey(new Date(activity.time));
+            let monthlyData = JSON.parse(localStorage.getItem(monthKey) || '[]');
+            monthlyData.push(activity);
+            localStorage.setItem(monthKey, JSON.stringify(monthlyData));
+        }
+        
+        function getAllMonthlyData() {
+            const allData = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('monthlyData_')) {
+                    const monthData = JSON.parse(localStorage.getItem(key) || '[]');
+                    allData.push(...monthData);
+                }
+            }
+            return allData.sort((a, b) => new Date(b.time) - new Date(a.time));
+        }
+        let schoolList = JSON.parse(localStorage.getItem('schoolList') || '["Lok Wah (LW)", "Sze Yap (SY)", "Ta Tung (TT)", "Kei Oi (KO)", "Lui Ming Choi (LMC)", "Queens\' Hill (QHS)", "But San (BS)", "Wai Chow (WC)", "Tang Ying Yip (TYY)", "Lim Kim Tian (LKT)", "Wong Tai Sin (WTS)"]');
+        let lessonTypes = JSON.parse(localStorage.getItem('lessonTypes') || '["Group Class", "Ensemble Class", "School Show", "Rehearsal", "Parents Workshop", "Individual Lesson", "Performance"]');
+
+        // Initialize the system
+        function init() {
+            updateTime();
+            setInterval(updateTime, 1000);
+            getCurrentLocation();
+            updateSchoolDropdown();
+            updateLessonTypeDropdown();
+            
+            // Initialize sample user data if empty
+            if (Object.keys(userData).length === 0) {
+                initializeSampleData();
+            }
+        }
+
+        // Initialize sample user data with new admin structure
+        function initializeSampleData() {
+            userData = {
+                'JC Projects': { 
+                    id: 'JC Projects', 
+                    name: 'JC Projects', 
+                    email: 'jcprojects@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'major_admin',
+                    mustChangePassword: true
+                },
+                'Agnes Chan': { 
+                    id: 'Agnes Chan', 
+                    name: 'Agnes Chan', 
+                    email: 'agneschan@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Jamie Ng': { 
+                    id: 'Jamie Ng', 
+                    name: 'Jamie Ng', 
+                    email: 'jamieng@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Carolyn Ho': { 
+                    id: 'Carolyn Ho', 
+                    name: 'Carolyn Ho', 
+                    email: 'carolynho@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Samuel Huang': { 
+                    id: 'Samuel Huang', 
+                    name: 'Samuel Huang', 
+                    email: 'samuelhuang@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Kelly Chau': { 
+                    id: 'Kelly Chau', 
+                    name: 'Kelly Chau', 
+                    email: 'kellychau@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Winnie Ng': { 
+                    id: 'Winnie Ng', 
+                    name: 'Winnie Ng', 
+                    email: 'winnie_ng@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'Tik Hei Lam': { 
+                    id: 'Tik Hei Lam', 
+                    name: 'Tik Hei Lam', 
+                    email: 'lamtikhei@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'admin',
+                    mustChangePassword: true
+                },
+                'tutor001': { 
+                    id: 'tutor001', 
+                    name: 'John Chan', 
+                    email: 'john.chan@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'tutor',
+                    mustChangePassword: true
+                },
+                'tutor002': { 
+                    id: 'tutor002', 
+                    name: 'Mary Wong', 
+                    email: 'mary.wong@hkbu.edu.hk', 
+                    password: 'temp123', 
+                    role: 'tutor',
+                    mustChangePassword: true
+                }
+            };
+            localStorage.setItem('userData', JSON.stringify(userData));
+        }
+
+        // Update school dropdown
+        function updateSchoolDropdown() {
+            const schoolSelect = document.getElementById('schoolSelect');
+            if (schoolSelect) {
+                schoolSelect.innerHTML = '<option value="">Select School</option>';
+                schoolList.forEach(school => {
+                    const option = document.createElement('option');
+                    option.value = school;
+                    option.textContent = school;
+                    schoolSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Update lesson type dropdown
+        function updateLessonTypeDropdown() {
+            const lessonTypeSelect = document.getElementById('lessonType');
+            if (lessonTypeSelect) {
+                lessonTypeSelect.innerHTML = '<option value="">Select Lesson Type</option>';
+                lessonTypes.forEach(lesson => {
+                    const option = document.createElement('option');
+                    option.value = lesson;
+                    option.textContent = lesson;
+                    lessonTypeSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Update current time display
+        function updateTime() {
+            const now = new Date();
+            const hktTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));
+            const timeElement = document.getElementById('currentTime');
+            if (timeElement) {
+                timeElement.textContent = hktTime.toLocaleString('en-HK', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
+        }
+
+        // Professional GPS location detection system
+        function getCurrentLocation() {
+            updateLocationDisplay('🔍 Detecting your location...');
+            
+            // Try multiple location methods simultaneously for best accuracy
+            Promise.race([
+                getHighAccuracyGPS(),
+                getStandardGPS(),
+                getNetworkLocation()
+            ]).then(location => {
+                if (location) {
+                    userLocation = location;
+                    // Get detailed address information
+                    getDetailedAddress(location.latitude, location.longitude);
+                } else {
+                    // Final fallback
+                    setFallbackLocation();
+                }
+            }).catch(error => {
+                console.log('All location methods failed:', error);
+                setFallbackLocation();
+            });
+        }
+
+        // High accuracy GPS with timeout
+        function getHighAccuracyGPS() {
+            return new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    reject('Geolocation not supported');
+                    return;
+                }
+                
+                const timeoutId = setTimeout(() => {
+                    reject('High accuracy GPS timeout');
+                }, 8000);
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        clearTimeout(timeoutId);
+                        resolve({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude,
+                            accuracy: position.coords.accuracy,
+                            altitude: position.coords.altitude,
+                            heading: position.coords.heading,
+                            speed: position.coords.speed,
+                            timestamp: position.timestamp,
+                            method: 'High-Accuracy GPS'
+                        });
+                    },
+                    (error) => {
+                        clearTimeout(timeoutId);
+                        reject(`High accuracy GPS error: ${error.message}`);
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 7000,
+                        maximumAge: 60000
+                    }
+                );
+            });
+        }
+
+        // Standard GPS fallback
+        function getStandardGPS() {
+            return new Promise((resolve, reject) => {
+                setTimeout(() => {
+                    if (!navigator.geolocation) {
+                        reject('Geolocation not supported');
+                        return;
+                    }
+                    
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            resolve({
+                                latitude: position.coords.latitude,
+                                longitude: position.coords.longitude,
+                                accuracy: position.coords.accuracy,
+                                method: 'Standard GPS'
+                            });
+                        },
+                        (error) => {
+                            reject(`Standard GPS error: ${error.message}`);
+                        },
+                        {
+                            enableHighAccuracy: false,
+                            timeout: 10000,
+                            maximumAge: 300000
+                        }
+                    );
+                }, 2000);
+            });
+        }
+
+        // Network-based location using IP geolocation APIs
+        async function getNetworkLocation() {
+            try {
+                // Try multiple IP geolocation services
+                const services = [
+                    'https://ipapi.co/json/',
+                    'https://ip-api.com/json/',
+                    'https://ipinfo.io/json'
+                ];
+                
+                for (const service of services) {
+                    try {
+                        const response = await fetch(service);
+                        const data = await response.json();
+                        
+                        if (data.latitude || data.lat) {
+                            return {
+                                latitude: data.latitude || data.lat,
+                                longitude: data.longitude || data.lon,
+                                accuracy: 10000, // IP location is less accurate
+                                city: data.city,
+                                region: data.region,
+                                country: data.country,
+                                method: 'Network/IP Location'
+                            };
+                        }
+                    } catch (error) {
+                        console.log(`IP service ${service} failed:`, error);
+                        continue;
+                    }
+                }
+            } catch (error) {
+                console.log('Network location failed:', error);
+            }
+            return null;
+        }
+
+        // Get detailed address using multiple geocoding services
+        async function getDetailedAddress(lat, lng) {
+            updateLocationDisplay('📍 Getting address details...');
+            
+            const geocodingServices = [
+                {
+                    name: 'OpenStreetMap Nominatim',
+                    url: `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&accept-language=en`,
+                    parser: (data) => ({
+                        formatted_address: data.display_name,
+                        street_number: data.address?.house_number || '',
+                        street_name: data.address?.road || '',
+                        district: data.address?.district || data.address?.suburb || data.address?.neighbourhood || '',
+                        city: data.address?.city || data.address?.town || '',
+                        region: data.address?.state || data.address?.region || '',
+                        country: data.address?.country || '',
+                        postal_code: data.address?.postcode || ''
+                    })
+                },
+                {
+                    name: 'BigDataCloud',
+                    url: `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`,
+                    parser: (data) => ({
+                        formatted_address: data.locality || `${data.city}, ${data.principalSubdivision}, ${data.countryName}`,
+                        street_name: data.localityInfo?.administrative?.[0]?.name || '',
+                        district: data.localityInfo?.administrative?.[1]?.name || '',
+                        city: data.city || '',
+                        region: data.principalSubdivision || '',
+                        country: data.countryName || '',
+                        postal_code: data.postcode || ''
+                    })
+                }
+            ];
+            
+            for (const service of geocodingServices) {
+                try {
+                    const response = await fetch(service.url);
+                    const data = await response.json();
+                    
+                    if (data && (data.display_name || data.locality)) {
+                        const addressInfo = service.parser(data);
+                        
+                        // Update user location with detailed address
+                        userLocation.address = addressInfo.formatted_address;
+                        userLocation.street_number = addressInfo.street_number;
+                        userLocation.street_name = addressInfo.street_name;
+                        userLocation.district = addressInfo.district;
+                        userLocation.city = addressInfo.city;
+                        userLocation.region = addressInfo.region;
+                        userLocation.country = addressInfo.country;
+                        userLocation.postal_code = addressInfo.postal_code;
+                        userLocation.geocoding_service = service.name;
+                        
+                        updateLocationDisplay();
+                        return;
+                    }
+                } catch (error) {
+                    console.log(`Geocoding service ${service.name} failed:`, error);
+                    continue;
+                }
+            }
+            
+            // If all geocoding services fail, use coordinate-based fallback
+            setCoordinateBasedAddress(lat, lng);
+        }
+
+        // Set coordinate-based address when geocoding fails
+        function setCoordinateBasedAddress(lat, lng) {
+            // Determine Hong Kong region based on coordinates
+            let region = 'Hong Kong';
+            let district = 'Unknown District';
+            
+            if (lat >= 22.15 && lat <= 22.35 && lng >= 113.8 && lng <= 114.3) {
+                if (lat >= 22.25 && lng >= 114.1) {
+                    region = 'Hong Kong Island';
+                    if (lat >= 22.27 && lat <= 22.29) district = 'Central & Western';
+                    else if (lat >= 22.26 && lat <= 22.30) district = 'Wan Chai';
+                    else if (lat >= 22.24 && lat <= 22.28) district = 'Eastern';
+                    else district = 'Southern';
+                } else if (lat >= 22.29 && lat <= 22.34 && lng >= 114.15 && lng <= 114.25) {
+                    region = 'Kowloon';
+                    if (lng <= 114.18) district = 'Yau Tsim Mong';
+                    else if (lng <= 114.22) district = 'Kowloon City';
+                    else district = 'Wong Tai Sin';
+                } else {
+                    region = 'New Territories';
+                    if (lat >= 22.32) district = 'North';
+                    else if (lng <= 114.0) district = 'Tuen Mun';
+                    else if (lng >= 114.2) district = 'Sha Tin';
+                    else district = 'Tai Po';
+                }
+            }
+            
+            userLocation.address = `${lat.toFixed(6)}, ${lng.toFixed(6)} - ${district}, ${region}`;
+            userLocation.district = district;
+            userLocation.region = region;
+            userLocation.geocoding_service = 'Coordinate-based';
+            
+            updateLocationDisplay();
+        }
+
+        // Set fallback location when all methods fail
+        function setFallbackLocation() {
+            userLocation = {
+                latitude: 22.3193,
+                longitude: 114.1694,
+                accuracy: 50000,
+                address: 'Hong Kong SAR, China (Location Services Unavailable)',
+                district: 'Unknown',
+                region: 'Hong Kong',
+                method: 'System Fallback',
+                geocoding_service: 'None'
+            };
+            updateLocationDisplay();
+        }
+
+        function updateLocationDisplay(loadingMessage = null) {
+            const locationElement = document.getElementById('locationDisplay');
+            const coordinatesElement = document.getElementById('coordinatesDisplay');
+            
+            if (loadingMessage) {
+                if (locationElement) {
+                    locationElement.innerHTML = `<span class="pulse-animation">${loadingMessage}</span>`;
+                }
+                if (coordinatesElement) {
+                    coordinatesElement.innerHTML = '<span class="text-sm">Please wait...</span>';
+                }
+                return;
+            }
+            
+            if (locationElement && userLocation) {
+                // Create professional location display with detailed information
+                locationElement.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span>📍 ${userLocation.address}</span>
+                        <button onclick="openInGoogleMaps()" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1 rounded-lg text-sm transition-all duration-200 flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"/>
+                            </svg>
+                            <span>View on Map</span>
+                        </button>
+                        <button onclick="refreshLocation()" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 py-1 rounded-lg text-sm transition-all duration-200 flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z"/>
+                            </svg>
+                            <span>Refresh</span>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            if (coordinatesElement && userLocation) {
+                const accuracyText = userLocation.accuracy ? `±${Math.round(userLocation.accuracy)}m` : 'Unknown accuracy';
+                const methodText = userLocation.method || 'Unknown method';
+                const geocodingText = userLocation.geocoding_service ? ` • ${userLocation.geocoding_service}` : '';
+                
+                coordinatesElement.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-sm">${userLocation.latitude.toFixed(6)}, ${userLocation.longitude.toFixed(6)} (${accuracyText})</span>
+                            <span class="text-xs opacity-75">${methodText}${geocodingText}</span>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="copyCoordinates()" class="bg-white bg-opacity-10 hover:bg-opacity-20 text-white px-2 py-1 rounded text-xs transition-all duration-200">
+                                Copy GPS
+                            </button>
+                            <button onclick="copyAddress()" class="bg-white bg-opacity-10 hover:bg-opacity-20 text-white px-2 py-1 rounded text-xs transition-all duration-200">
+                                Copy Address
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // Refresh location function
+        function refreshLocation() {
+            userLocation = null;
+            getCurrentLocation();
+            showNotification('info', 'Refreshing Location', 'Getting updated location information...');
+        }
+
+        // Copy address to clipboard
+        function copyAddress() {
+            if (!userLocation || !userLocation.address) {
+                showNotification('error', 'No Address', 'Address not available');
+                return;
+            }
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(userLocation.address).then(() => {
+                    showNotification('success', 'Copied', 'Address copied to clipboard');
+                }).catch(() => {
+                    fallbackCopyToClipboard(userLocation.address);
+                });
+            } else {
+                fallbackCopyToClipboard(userLocation.address);
+            }
+        }
+
+        // Open location in Google Maps
+        function openInGoogleMaps() {
+            if (!userLocation) {
+                showNotification('error', 'No Location', 'Location not available');
+                return;
+            }
+            
+            // Create Google Maps URL with coordinates and address
+            const mapsUrl = `https://www.google.com/maps?q=${userLocation.latitude},${userLocation.longitude}&z=17&t=m`;
+            
+            // Open in new tab/window
+            window.open(mapsUrl, '_blank');
+            
+            showNotification('success', 'Opening Maps', 'Google Maps opened in new tab');
+        }
+
+        // Copy coordinates to clipboard
+        function copyCoordinates() {
+            if (!userLocation) {
+                showNotification('error', 'No Location', 'Location not available');
+                return;
+            }
+            
+            const coordinates = `${userLocation.latitude}, ${userLocation.longitude}`;
+            
+            // Try to copy to clipboard
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(coordinates).then(() => {
+                    showNotification('success', 'Copied', 'Coordinates copied to clipboard');
+                }).catch(() => {
+                    fallbackCopyToClipboard(coordinates);
+                });
+            } else {
+                fallbackCopyToClipboard(coordinates);
+            }
+        }
+
+        // Fallback copy method for older browsers
+        function fallbackCopyToClipboard(text) {
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            textArea.style.top = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showNotification('success', 'Copied', 'Coordinates copied to clipboard');
+            } catch (err) {
+                showNotification('error', 'Copy Failed', 'Could not copy coordinates');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        // Switch login method
+        function switchLoginMethod(method) {
+            const biometricTab = document.getElementById('biometricTab');
+            const passwordTab = document.getElementById('passwordTab');
+            const biometricLogin = document.getElementById('biometricLogin');
+            const passwordLogin = document.getElementById('passwordLogin');
+
+            if (method === 'biometric') {
+                biometricTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm';
+                passwordTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800';
+                biometricLogin.classList.remove('hidden');
+                passwordLogin.classList.add('hidden');
+            } else {
+                passwordTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium bg-white text-purple-600 shadow-sm';
+                biometricTab.className = 'flex-1 py-2 px-4 rounded-md text-sm font-medium text-gray-600 hover:text-gray-800';
+                passwordLogin.classList.remove('hidden');
+                biometricLogin.classList.add('hidden');
+            }
+        }
+
+        // Biometric login simulation
+        async function biometricLogin() {
+            const tutorId = document.getElementById('tutorIdBio').value;
+            if (!tutorId) {
+                document.getElementById('loginStatus').innerHTML = 
+                    '<span class="text-red-600">Please enter your User ID or HKBU Email</span>';
+                return;
+            }
+
+            // Show biometric authentication steps
+            document.getElementById('loginStatus').innerHTML = 
+                '<span class="text-blue-600 pulse-animation">🔍 Looking up user account...</span>';
+
+            setTimeout(() => {
+                const user = findUserByIdOrEmail(tutorId);
+                if (!user) {
+                    document.getElementById('loginStatus').innerHTML = 
+                        '<span class="text-red-600">❌ User not found in system</span>';
+                    return;
+                }
+
+                document.getElementById('loginStatus').innerHTML = 
+                    '<span class="text-blue-600 pulse-animation">👤 User found: ' + user.name + '</span>';
+
+                setTimeout(() => {
+                    document.getElementById('loginStatus').innerHTML = 
+                        '<span class="text-blue-600 pulse-animation">🔐 Requesting biometric authentication...</span>';
+
+                    setTimeout(() => {
+                        document.getElementById('loginStatus').innerHTML = 
+                            '<span class="text-blue-600 pulse-animation">📱 Please use your fingerprint, face ID, or device PIN...</span>';
+
+                        setTimeout(() => {
+                            document.getElementById('loginStatus').innerHTML = 
+                                '<span class="text-green-600">✅ Biometric authentication successful!</span>';
+
+                            setTimeout(() => {
+                                loginUser(user);
+                            }, 1000);
+                        }, 2000);
+                    }, 1500);
+                }, 1000);
+            }, 800);
+        }
+
+        // Password login
+        function passwordLogin() {
+            const tutorId = document.getElementById('tutorIdPass').value;
+            const password = document.getElementById('password').value;
+
+            if (!tutorId || !password) {
+                document.getElementById('loginStatus').innerHTML = 
+                    '<span class="text-red-600">Please enter both ID/Email and password</span>';
+                return;
+            }
+
+            const user = findUserByIdOrEmail(tutorId);
+            if (user && user.password === password) {
+                loginUser(user);
+            } else {
+                document.getElementById('loginStatus').innerHTML = 
+                    '<span class="text-red-600">❌ Invalid credentials</span>';
+            }
+        }
+
+        // Find user by ID or email
+        function findUserByIdOrEmail(identifier) {
+            return Object.values(userData).find(user => 
+                user.id === identifier || user.email === identifier
+            );
+        }
+
+        // Login user
+        function loginUser(user) {
+            currentUser = user;
+            
+            // Check if user must change password
+            if (user.mustChangePassword) {
+                document.getElementById('loginScreen').classList.add('hidden');
+                document.getElementById('changePasswordModal').classList.remove('hidden');
+                return;
+            }
+            
+            document.getElementById('loginScreen').classList.add('hidden');
+            
+            if (user.role === 'major_admin' || user.role === 'admin') {
+                document.getElementById('adminEmail').textContent = user.email;
+                document.getElementById('adminRole').textContent = user.role === 'major_admin' ? 'Major Administrator' : 'Administrator';
+                
+                // Show manage admins button only for major admin
+                if (user.role === 'major_admin') {
+                    document.getElementById('manageAdminsBtn').classList.remove('hidden');
+                }
+                
+                document.getElementById('adminPanel').classList.remove('hidden');
+                updateAdminDashboard();
+            } else {
+                document.getElementById('tutorName').textContent = user.name;
+                document.getElementById('dashboard').classList.remove('hidden');
+                loadRecentActivity();
+            }
+            
+            showNotification('success', 'Login Successful', `Welcome back, ${user.name}!`);
+        }
+
+        // Show/hide modals
+        function showForgotId() {
+            document.getElementById('forgotIdModal').classList.remove('hidden');
+        }
+
+        function hideForgotId() {
+            document.getElementById('forgotIdModal').classList.add('hidden');
+            document.getElementById('findIdEmail').value = '';
+        }
+
+        function showResetPassword() {
+            document.getElementById('resetPasswordModal').classList.remove('hidden');
+        }
+
+        function hideResetPassword() {
+            document.getElementById('resetPasswordModal').classList.add('hidden');
+            document.getElementById('resetEmail').value = '';
+        }
+
+        function showManageSchools() {
+            document.getElementById('manageSchoolsModal').classList.remove('hidden');
+            populateSchoolsList();
+        }
+
+        function hideManageSchools() {
+            document.getElementById('manageSchoolsModal').classList.add('hidden');
+            document.getElementById('newSchoolName').value = '';
+            document.getElementById('newSchoolCode').value = '';
+        }
+
+        function showManageLessons() {
+            document.getElementById('manageLessonsModal').classList.remove('hidden');
+            populateLessonTypesList();
+        }
+
+        function hideManageLessons() {
+            document.getElementById('manageLessonsModal').classList.add('hidden');
+        }
+
+        function showManageUsers() {
+            document.getElementById('manageUsersModal').classList.remove('hidden');
+            populateUsersList();
+        }
+
+        function hideManageUsers() {
+            document.getElementById('manageUsersModal').classList.add('hidden');
+        }
+
+        function showManageAdmins() {
+            document.getElementById('manageAdminsModal').classList.remove('hidden');
+            populateAdminsList();
+        }
+
+        function hideManageAdmins() {
+            document.getElementById('manageAdminsModal').classList.add('hidden');
+        }
+
+        // Password strength checker
+        function checkPasswordStrength(password) {
+            const strengthDiv = document.getElementById('passwordStrength');
+            let strength = 0;
+            let feedback = [];
+
+            if (password.length >= 8) strength++;
+            else feedback.push('At least 8 characters');
+
+            if (/[A-Z]/.test(password)) strength++;
+            else feedback.push('One uppercase letter');
+
+            if (/[a-z]/.test(password)) strength++;
+            else feedback.push('One lowercase letter');
+
+            if (/[0-9]/.test(password)) strength++;
+            else feedback.push('One number');
+
+            if (/[^A-Za-z0-9]/.test(password)) strength++;
+            else feedback.push('One special character');
+
+            const colors = ['text-red-600', 'text-orange-600', 'text-yellow-600', 'text-blue-600', 'text-green-600'];
+            const labels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+
+            if (password.length === 0) {
+                strengthDiv.innerHTML = '';
+                return false;
+            }
+
+            strengthDiv.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <div class="flex space-x-1">
+                        ${Array.from({length: 5}, (_, i) => 
+                            `<div class="w-4 h-2 rounded ${i < strength ? 'bg-current' : 'bg-gray-200'}"></div>`
+                        ).join('')}
+                    </div>
+                    <span class="${colors[strength - 1] || 'text-red-600'}">${labels[strength - 1] || 'Very Weak'}</span>
+                </div>
+                ${feedback.length > 0 ? `<p class="text-xs text-gray-500 mt-1">Missing: ${feedback.join(', ')}</p>` : ''}
+            `;
+
+            return strength >= 3;
+        }
+
+        // Change password function
+        function changePassword() {
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                showNotification('error', 'Missing Information', 'Please fill in all password fields');
+                return;
+            }
+
+            if (currentUser.password !== currentPassword) {
+                showNotification('error', 'Invalid Password', 'Current password is incorrect');
+                return;
+            }
+
+            if (newPassword.length < 8) {
+                showNotification('error', 'Password Too Short', 'New password must be at least 8 characters');
+                return;
+            }
+
+            if (newPassword !== confirmPassword) {
+                showNotification('error', 'Password Mismatch', 'New passwords do not match');
+                return;
+            }
+
+            if (!checkPasswordStrength(newPassword)) {
+                showNotification('error', 'Weak Password', 'Please choose a stronger password');
+                return;
+            }
+
+            // Update password
+            currentUser.password = newPassword;
+            currentUser.mustChangePassword = false;
+            userData[currentUser.id] = currentUser;
+            localStorage.setItem('userData', JSON.stringify(userData));
+
+            // Hide modal and continue to appropriate dashboard
+            document.getElementById('changePasswordModal').classList.add('hidden');
+            
+            if (currentUser.role === 'major_admin' || currentUser.role === 'admin') {
+                document.getElementById('adminEmail').textContent = currentUser.email;
+                document.getElementById('adminRole').textContent = currentUser.role === 'major_admin' ? 'Major Administrator' : 'Administrator';
+                
+                if (currentUser.role === 'major_admin') {
+                    document.getElementById('manageAdminsBtn').classList.remove('hidden');
+                }
+                
+                document.getElementById('adminPanel').classList.remove('hidden');
+                updateAdminDashboard();
+            } else {
+                document.getElementById('tutorName').textContent = currentUser.name;
+                document.getElementById('dashboard').classList.remove('hidden');
+                loadRecentActivity();
+            }
+
+            showNotification('success', 'Password Changed', 'Your password has been updated successfully');
+
+            // Clear form
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+        }
+
+        // Add password strength checking on input
+        document.addEventListener('DOMContentLoaded', function() {
+            const newPasswordInput = document.getElementById('newPassword');
+            if (newPasswordInput) {
+                newPasswordInput.addEventListener('input', function() {
+                    checkPasswordStrength(this.value);
+                });
+            }
+        });
+
+        // Add lesson type function
+        function addLessonType() {
+            const lessonType = document.getElementById('newLessonType').value.trim();
+            
+            if (!lessonType) {
+                showNotification('error', 'Missing Information', 'Please enter a lesson type name');
+                return;
+            }
+
+            if (lessonTypes.includes(lessonType)) {
+                showNotification('error', 'Already Exists', 'This lesson type already exists');
+                return;
+            }
+
+            lessonTypes.push(lessonType);
+            localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
+            updateLessonTypeDropdown();
+            populateLessonTypesList();
+            
+            // Send notification to JC Projects
+            sendEmailToMajorAdmin('lesson_type_added', {
+                lessonType: lessonType,
+                addedBy: currentUser.name
+            });
+            
+            showNotification('success', 'Lesson Type Added', `${lessonType} has been added to the system and JC Projects notified`);
+            document.getElementById('newLessonType').value = '';
+        }
+
+        // Populate lesson types list
+        function populateLessonTypesList() {
+            const lessonTypesList = document.getElementById('lessonTypesList');
+            lessonTypesList.innerHTML = '';
+
+            lessonTypes.forEach((lessonType, index) => {
+                const lessonItem = document.createElement('div');
+                lessonItem.className = 'bg-white border border-gray-200 rounded-lg p-4';
+                
+                lessonItem.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium text-gray-800">${lessonType}</span>
+                        <button onclick="deleteLessonType(${index})" class="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                
+                lessonTypesList.appendChild(lessonItem);
+            });
+        }
+
+        // Delete lesson type
+        function deleteLessonType(index) {
+            if (!confirm('Are you sure you want to delete this lesson type?')) return;
+
+            const deletedType = lessonTypes[index];
+            lessonTypes.splice(index, 1);
+            localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
+            updateLessonTypeDropdown();
+            populateLessonTypesList();
+
+            showNotification('success', 'Lesson Type Deleted', `${deletedType} has been removed from the system`);
+        }
+
+        // Add new tutor function
+        function addNewTutor() {
+            const name = document.getElementById('newTutorName').value;
+            const email = document.getElementById('newTutorEmail').value;
+            const tutorId = document.getElementById('newTutorId').value;
+
+            if (!name || !email || !tutorId) {
+                showNotification('error', 'Missing Information', 'Please fill in all fields');
+                return;
+            }
+
+            if (!email.includes('@hkbu.edu.hk')) {
+                showNotification('error', 'Invalid Email', 'Email must be a valid HKBU address');
+                return;
+            }
+
+            if (userData[tutorId]) {
+                showNotification('error', 'ID Already Exists', 'This Tutor ID is already in use');
+                return;
+            }
+
+            // Generate temporary password
+            const tempPassword = 'temp123';
+
+            userData[tutorId] = {
+                id: tutorId,
+                name: name,
+                email: email,
+                password: tempPassword,
+                role: 'tutor',
+                mustChangePassword: true,
+                createdBy: currentUser.id,
+                createdAt: new Date().toISOString()
+            };
+
+            localStorage.setItem('userData', JSON.stringify(userData));
+
+            // Send credentials to tutor and major admin
+            sendEmailToMajorAdmin('new_tutor', {
+                tutorName: name,
+                tutorEmail: email,
+                tutorId: tutorId,
+                tempPassword: tempPassword,
+                createdBy: currentUser.name
+            });
+
+            showNotification('success', 'Tutor Added', `New tutor account created. Credentials sent to ${email} and major admin`);
+
+            // Clear form and refresh list
+            document.getElementById('newTutorName').value = '';
+            document.getElementById('newTutorEmail').value = '';
+            document.getElementById('newTutorId').value = '';
+            populateUsersList();
+        }
+
+        // Add new admin function (only for major admin)
+        function addNewAdmin() {
+            if (currentUser.role !== 'major_admin') {
+                showNotification('error', 'Access Denied', 'Only major admin can add administrators');
+                return;
+            }
+
+            const name = document.getElementById('newAdminName').value;
+            const email = document.getElementById('newAdminEmail').value;
+            const adminId = document.getElementById('newAdminId').value;
+
+            if (!name || !email || !adminId) {
+                showNotification('error', 'Missing Information', 'Please fill in all fields');
+                return;
+            }
+
+            if (!email.includes('@hkbu.edu.hk')) {
+                showNotification('error', 'Invalid Email', 'Email must be a valid HKBU address');
+                return;
+            }
+
+            if (userData[adminId]) {
+                showNotification('error', 'ID Already Exists', 'This Admin ID is already in use');
+                return;
+            }
+
+            // Generate temporary password
+            const tempPassword = 'temp123';
+
+            userData[adminId] = {
+                id: adminId,
+                name: name,
+                email: email,
+                password: tempPassword,
+                role: 'admin',
+                mustChangePassword: true,
+                createdBy: currentUser.id,
+                createdAt: new Date().toISOString()
+            };
+
+            localStorage.setItem('userData', JSON.stringify(userData));
+
+            // Send credentials to new admin and log for major admin
+            console.log(`📧 New admin credentials sent to ${email}:`);
+            console.log(`Admin ID: ${adminId}`);
+            console.log(`Temporary Password: ${tempPassword}`);
+
+            showNotification('success', 'Admin Added', `New administrator account created. Credentials sent to ${email}`);
+
+            // Clear form and refresh list
+            document.getElementById('newAdminName').value = '';
+            document.getElementById('newAdminEmail').value = '';
+            document.getElementById('newAdminId').value = '';
+            populateAdminsList();
+        }
+
+        // Populate users list
+        function populateUsersList() {
+            const usersList = document.getElementById('usersList');
+            usersList.innerHTML = '';
+
+            Object.values(userData).filter(user => user.role === 'tutor').forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'bg-white border border-gray-200 rounded-lg p-4';
+                
+                userItem.innerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                        <div class="flex-1">
+                            <h5 class="font-semibold text-gray-800">${user.name}</h5>
+                            <p class="text-sm text-gray-600">${user.email}</p>
+                            <p class="text-xs text-gray-500">ID: ${user.id}</p>
+                            ${user.mustChangePassword ? '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded mt-1 inline-block">Must Change Password</span>' : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="resetTutorPassword('${user.id}')" class="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">
+                                Reset Password
+                            </button>
+                            <button onclick="deleteTutor('${user.id}')" class="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+                
+                usersList.appendChild(userItem);
+            });
+        }
+
+        // Populate admins list
+        function populateAdminsList() {
+            const adminsList = document.getElementById('adminsList');
+            adminsList.innerHTML = '';
+
+            Object.values(userData).filter(user => user.role === 'admin' || user.role === 'major_admin').forEach(user => {
+                const adminItem = document.createElement('div');
+                adminItem.className = 'bg-white border border-gray-200 rounded-lg p-4';
+                
+                const roleDisplay = user.role === 'major_admin' ? 'Major Administrator' : 'Administrator';
+                const canDelete = currentUser.role === 'major_admin' && user.role !== 'major_admin';
+                
+                adminItem.innerHTML = `
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                        <div class="flex-1">
+                            <h5 class="font-semibold text-gray-800">${user.name}</h5>
+                            <p class="text-sm text-gray-600">${user.email}</p>
+                            <p class="text-xs text-gray-500">ID: ${user.id}</p>
+                            <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded mt-1 inline-block">${roleDisplay}</span>
+                            ${user.mustChangePassword ? '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded mt-1 inline-block ml-2">Must Change Password</span>' : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="resetAdminPassword('${user.id}')" class="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">
+                                Reset Password
+                            </button>
+                            ${canDelete ? `<button onclick="deleteAdmin('${user.id}')" class="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">Delete</button>` : ''}
+                        </div>
+                    </div>
+                `;
+                
+                adminsList.appendChild(adminItem);
+            });
+        }
+
+        // Reset tutor password
+        function resetTutorPassword(tutorId) {
+            if (!confirm('Are you sure you want to reset this tutor\'s password?')) return;
+
+            const tempPassword = 'temp123';
+            userData[tutorId].password = tempPassword;
+            userData[tutorId].mustChangePassword = true;
+            localStorage.setItem('userData', JSON.stringify(userData));
+
+            // Send to tutor and major admin
+            sendEmailToMajorAdmin('password_reset', {
+                userName: userData[tutorId].name,
+                userEmail: userData[tutorId].email,
+                userId: tutorId,
+                tempPassword: tempPassword,
+                resetBy: currentUser.name,
+                userType: 'tutor'
+            });
+
+            showNotification('success', 'Password Reset', `New temporary password sent to ${userData[tutorId].email} and major admin`);
+            populateUsersList();
+        }
+
+        // Reset admin password
+        function resetAdminPassword(adminId) {
+            if (!confirm('Are you sure you want to reset this administrator\'s password?')) return;
+
+            const tempPassword = 'temp123';
+            userData[adminId].password = tempPassword;
+            userData[adminId].mustChangePassword = true;
+            localStorage.setItem('userData', JSON.stringify(userData));
+
+            // Send to admin and major admin
+            sendEmailToMajorAdmin('password_reset', {
+                userName: userData[adminId].name,
+                userEmail: userData[adminId].email,
+                userId: adminId,
+                tempPassword: tempPassword,
+                resetBy: currentUser.name,
+                userType: 'administrator'
+            });
+
+            showNotification('success', 'Password Reset', `New temporary password sent to ${userData[adminId].email} and major admin`);
+            populateAdminsList();
+        }
+
+        // Delete tutor
+        function deleteTutor(tutorId) {
+            if (!confirm('Are you sure you want to delete this tutor account? This action cannot be undone.')) return;
+
+            const deletedUser = userData[tutorId];
+            if (deletedUser) {
+                delete userData[tutorId];
+                localStorage.setItem('userData', JSON.stringify(userData));
+                showNotification('success', 'Tutor Deleted', 'Tutor account has been removed from the system');
+                populateUsersList();
+            } else {
+                showNotification('error', 'Delete Failed', 'Tutor not found');
+            }
+        }
+
+        // Delete admin (only major admin can do this)
+        function deleteAdmin(adminId) {
+            if (currentUser.role !== 'major_admin') {
+                showNotification('error', 'Access Denied', 'Only major admin can delete administrators');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to delete this administrator account? This action cannot be undone.')) return;
+
+            const deletedUser = userData[adminId];
+            if (deletedUser) {
+                delete userData[adminId];
+                localStorage.setItem('userData', JSON.stringify(userData));
+                showNotification('success', 'Admin Deleted', 'Administrator account has been removed from the system');
+                populateAdminsList();
+            } else {
+                showNotification('error', 'Delete Failed', 'Administrator not found');
+            }
+        }
+
+        // Send download notification emails
+        function sendDownloadNotification(type, data) {
+            console.log(`📧 Download notification emails sent:`);
+            
+            if (type === 'user_download') {
+                // Send to user
+                console.log(`\n📧 Email sent to ${data.userEmail}:`);
+                console.log(`Subject: Attendance Records Downloaded - ${data.filename}`);
+                console.log(`Dear ${data.userName},`);
+                console.log(`\nYour attendance records have been successfully downloaded:`);
+                console.log(`Filename: ${data.filename}`);
+                console.log(`Records Count: ${data.recordCount}`);
+                console.log(`Download Time: ${data.downloadTime}`);
+                console.log(`\nThe file has been saved to your desktop/downloads folder.`);
+                console.log(`\nThank you for using the HKBU Attendance System.`);
+                
+                // Send to JC Projects
+                console.log(`\n📧 Notification sent to jcprojects@hkbu.edu.hk:`);
+                console.log(`Subject: User Download Alert - ${data.userName}`);
+                console.log(`User: ${data.userName} (${data.userEmail})`);
+                console.log(`Downloaded File: ${data.filename}`);
+                console.log(`Records Count: ${data.recordCount}`);
+                console.log(`Download Time: ${data.downloadTime}`);
+                console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+            } else if (type === 'admin_export') {
+                // Send to admin
+                console.log(`\n📧 Email sent to ${data.adminEmail}:`);
+                console.log(`Subject: Admin Export Completed - ${data.filename}`);
+                console.log(`Dear ${data.adminName},`);
+                console.log(`\nYour admin export has been successfully completed:`);
+                console.log(`Filename: ${data.filename}`);
+                console.log(`Records Count: ${data.recordCount}`);
+                console.log(`Export Time: ${data.downloadTime}`);
+                console.log(`\nThe file has been saved to your desktop/downloads folder.`);
+                console.log(`\nThis export contains all attendance data from the system.`);
+                console.log(`\nThank you for using the HKBU Attendance System.`);
+                
+                // Send to JC Projects if not already JC Projects
+                if (data.adminEmail !== 'jcprojects@hkbu.edu.hk') {
+                    console.log(`\n📧 Notification sent to jcprojects@hkbu.edu.hk:`);
+                    console.log(`Subject: Admin Export Alert - ${data.adminName}`);
+                    console.log(`Administrator: ${data.adminName} (${data.adminEmail})`);
+                    console.log(`Exported File: ${data.filename}`);
+                    console.log(`Records Count: ${data.recordCount}`);
+                    console.log(`Export Time: ${data.downloadTime}`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                }
+            }
+        }
+
+        // Send email to JC Projects (major admin)
+        function sendEmailToMajorAdmin(type, data) {
+            // Always send to jcprojects@hkbu.edu.hk
+            console.log(`📧 Email sent to jcprojects@hkbu.edu.hk:`);
+            
+            switch(type) {
+                case 'new_tutor':
+                    console.log(`Subject: New Tutor Account Created - ${data.tutorName}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA new tutor account has been created in the HKBU Attendance System:`);
+                    console.log(`Tutor Name: ${data.tutorName}`);
+                    console.log(`Email: ${data.tutorEmail}`);
+                    console.log(`Tutor ID: ${data.tutorId}`);
+                    console.log(`Temporary Password: ${data.tempPassword}`);
+                    console.log(`Created by: ${data.createdBy}`);
+                    console.log(`Created at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThe tutor has been notified and must change their password on first login.`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'password_reset':
+                    console.log(`Subject: Password Reset Alert - ${data.userName}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA password reset has been performed in the HKBU Attendance System:`);
+                    console.log(`User: ${data.userName} (${data.userEmail})`);
+                    console.log(`User ID: ${data.userId}`);
+                    console.log(`User Type: ${data.userType}`);
+                    console.log(`New Temporary Password: ${data.tempPassword}`);
+                    console.log(`Reset by: ${data.resetBy}`);
+                    console.log(`Reset at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThe user has been notified and must change their password on next login.`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'user_deleted':
+                    console.log(`Subject: User Account Deleted - ${data.userName}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA user account has been deleted from the HKBU Attendance System:`);
+                    console.log(`Deleted User: ${data.userName} (${data.userEmail})`);
+                    console.log(`User ID: ${data.userId}`);
+                    console.log(`User Type: ${data.userType}`);
+                    console.log(`Deleted by: ${data.deletedBy}`);
+                    console.log(`Deleted at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThis action cannot be undone. All associated data has been removed.`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'school_added':
+                    console.log(`Subject: New School Added - ${data.schoolName}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA new school has been added to the HKBU Attendance System:`);
+                    console.log(`School: ${data.schoolName}`);
+                    console.log(`Added by: ${data.addedBy}`);
+                    console.log(`Added at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'lesson_type_added':
+                    console.log(`Subject: New Lesson Type Added - ${data.lessonType}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA new lesson type has been added to the HKBU Attendance System:`);
+                    console.log(`Lesson Type: ${data.lessonType}`);
+                    console.log(`Added by: ${data.addedBy}`);
+                    console.log(`Added at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'lesson_type_deleted':
+                    console.log(`Subject: Lesson Type Deleted - ${data.lessonType}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA lesson type has been deleted from the HKBU Attendance System:`);
+                    console.log(`Deleted Lesson Type: ${data.lessonType}`);
+                    console.log(`Deleted by: ${data.deletedBy}`);
+                    console.log(`Deleted at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThis action cannot be undone. All references to this lesson type have been removed.`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+                case 'school_deleted':
+                    console.log(`Subject: School Deleted - ${data.schoolName}`);
+                    console.log(`Dear JC Projects Team,`);
+                    console.log(`\nA school has been deleted from the HKBU Attendance System:`);
+                    console.log(`Deleted School: ${data.schoolName}`);
+                    console.log(`Deleted by: ${data.deletedBy}`);
+                    console.log(`Deleted at: ${new Date().toLocaleString('en-HK')}`);
+                    console.log(`\nThis action cannot be undone. All references to this school have been removed.`);
+                    console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+                    break;
+            }
+        }
+
+        // Find ID function
+        function findId() {
+            const email = document.getElementById('findIdEmail').value;
+            if (!email || !email.includes('@hkbu.edu.hk')) {
+                alert('Please enter a valid HKBU email address');
+                return;
+            }
+
+            const user = Object.values(userData).find(u => u.email === email);
+            if (user) {
+                // Simulate sending email
+                console.log(`📧 ID Recovery email sent to ${email}`);
+                console.log(`Your User ID is: ${user.id}`);
+                showNotification('success', 'ID Sent', `Your User ID has been sent to ${email}`);
+                hideForgotId();
+            } else {
+                alert('No account found with this email address');
+            }
+        }
+
+        // Reset password function
+        function resetPassword() {
+            const email = document.getElementById('resetEmail').value;
+            if (!email || !email.includes('@hkbu.edu.hk')) {
+                alert('Please enter a valid HKBU email address');
+                return;
+            }
+
+            const user = Object.values(userData).find(u => u.email === email);
+            if (user) {
+                // Simulate sending reset email
+                console.log(`📧 Password reset email sent to ${email}`);
+                console.log(`Reset link: https://system.hkbu.edu.hk/reset?token=abc123`);
+                showNotification('success', 'Reset Link Sent', `Password reset instructions sent to ${email}`);
+                hideResetPassword();
+            } else {
+                alert('No account found with this email address');
+            }
+        }
+
+        // Populate schools list
+        function populateSchoolsList() {
+            const schoolsList = document.getElementById('schoolsList');
+            schoolsList.innerHTML = '';
+
+            schoolList.forEach((school, index) => {
+                const schoolItem = document.createElement('div');
+                schoolItem.className = 'bg-white border border-gray-200 rounded-lg p-4';
+                
+                schoolItem.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <span class="font-medium text-gray-800">${school}</span>
+                        <button onclick="deleteSchool(${index})" class="text-sm bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                
+                schoolsList.appendChild(schoolItem);
+            });
+        }
+
+        // Add new school
+        function addSchool() {
+            const name = document.getElementById('newSchoolName').value.trim();
+            const code = document.getElementById('newSchoolCode').value.trim();
+            
+            if (!name || !code) {
+                showNotification('error', 'Missing Information', 'Please enter both school name and code');
+                return;
+            }
+
+            const schoolEntry = `${name} (${code})`;
+            
+            if (schoolList.includes(schoolEntry)) {
+                showNotification('error', 'Already Exists', 'This school already exists');
+                return;
+            }
+
+            schoolList.push(schoolEntry);
+            localStorage.setItem('schoolList', JSON.stringify(schoolList));
+            updateSchoolDropdown();
+            populateSchoolsList();
+            
+            // Send notification to JC Projects
+            sendEmailToMajorAdmin('school_added', {
+                schoolName: schoolEntry,
+                addedBy: currentUser.name
+            });
+            
+            document.getElementById('totalSchools').textContent = schoolList.length;
+            showNotification('success', 'School Added', `${schoolEntry} has been added to the system and JC Projects notified`);
+            
+            // Clear form
+            document.getElementById('newSchoolName').value = '';
+            document.getElementById('newSchoolCode').value = '';
+        }
+
+        // Delete school
+        function deleteSchool(index) {
+            if (!confirm('Are you sure you want to delete this school?')) return;
+
+            const deletedSchool = schoolList[index];
+            schoolList.splice(index, 1);
+            localStorage.setItem('schoolList', JSON.stringify(schoolList));
+            updateSchoolDropdown();
+            populateSchoolsList();
+            
+            // Update total schools count
+            const totalSchoolsElement = document.getElementById('totalSchools');
+            if (totalSchoolsElement) {
+                totalSchoolsElement.textContent = schoolList.length;
+            }
+            
+            showNotification('success', 'School Deleted', `${deletedSchool} has been removed from the system`);
+        }
+
+        // Show notification
+        function showNotification(type, title, message) {
+            const notification = document.getElementById('notification');
+            const icon = document.getElementById('notificationIcon');
+            const titleEl = document.getElementById('notificationTitle');
+            const messageEl = document.getElementById('notificationMessage');
+
+            const icons = {
+                success: '<svg class="w-6 h-6 text-green-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>',
+                error: '<svg class="w-6 h-6 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"/></svg>',
+                info: '<svg class="w-6 h-6 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"/></svg>'
+            };
+
+            icon.innerHTML = icons[type] || icons.info;
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 5000);
+        }
+
+        // Hide notification
+        function hideNotification() {
+            document.getElementById('notification').classList.remove('show');
+        }
+
+        // Check in function
+        function checkIn() {
+            const school = document.getElementById('schoolSelect').value;
+            const lessonType = document.getElementById('lessonType').value;
+            const isSubstitute = document.getElementById('substituteClass').checked;
+
+            if (!school || !lessonType) {
+                showNotification('error', 'Missing Information', 'Please select both school and lesson type');
+                return;
+            }
+
+            if (!userLocation) {
+                showNotification('error', 'Location Required', 'Please enable location services to check in');
+                return;
+            }
+
+            const now = new Date();
+            const hktTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));
+            
+            currentSession = {
+                id: Date.now(),
+                tutorId: currentUser.id,
+                tutorName: currentUser.name,
+                tutorEmail: currentUser.email,
+                school: school,
+                lessonType: lessonType,
+                isSubstitute: isSubstitute,
+                checkInTime: hktTime,
+                location: userLocation,
+                status: 'active'
+            };
+
+            // Update UI
+            document.getElementById('checkinBtn').disabled = true;
+            document.getElementById('checkinBtn').classList.add('bg-gray-400');
+            document.getElementById('checkinBtn').classList.remove('bg-green-600', 'hover:bg-green-700');
+            
+            document.getElementById('checkoutBtn').disabled = false;
+            document.getElementById('checkoutBtn').classList.remove('bg-gray-400');
+            document.getElementById('checkoutBtn').classList.add('bg-red-600', 'hover:bg-red-700');
+
+            updateSessionStatus();
+            
+            // Log activity
+            const activity = {
+                id: Date.now(),
+                type: 'check-in',
+                tutor: currentUser.name,
+                tutorEmail: currentUser.email,
+                school: school,
+                lessonType: lessonType,
+                time: hktTime.toISOString(),
+                timeDisplay: hktTime.toLocaleString('en-HK'),
+                location: userLocation?.address || 'Unknown',
+                coordinates: `${userLocation?.latitude}, ${userLocation?.longitude}`,
+                isSubstitute: isSubstitute,
+                sessionId: currentSession.id
+            };
+            
+            activityLog.unshift(activity);
+            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+            
+            // Save to monthly storage
+            saveToMonthlyStorage(activity);
+            
+            addToRecentActivity(activity);
+            
+            // Send email notification
+            sendEmailNotification('check-in', activity);
+            
+            showNotification('success', 'Checked In Successfully', 
+                `You've checked in at ${school}. Email confirmation sent to ${currentUser.email} and major admin`);
+        }
+
+        // Check out function
+        function checkOut() {
+            if (!currentSession) return;
+
+            const now = new Date();
+            const hktTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Hong_Kong"}));
+            
+            currentSession.checkOutTime = hktTime;
+            currentSession.status = 'completed';
+            
+            // Calculate duration
+            const duration = Math.round((hktTime - currentSession.checkInTime) / (1000 * 60)); // minutes
+            currentSession.duration = duration;
+
+            // Update UI
+            document.getElementById('checkinBtn').disabled = false;
+            document.getElementById('checkinBtn').classList.remove('bg-gray-400');
+            document.getElementById('checkinBtn').classList.add('bg-green-600', 'hover:bg-green-700');
+            
+            document.getElementById('checkoutBtn').disabled = true;
+            document.getElementById('checkoutBtn').classList.add('bg-gray-400');
+            document.getElementById('checkoutBtn').classList.remove('bg-red-600', 'hover:bg-red-700');
+
+            // Log activity with substitute status carried over from check-in
+            const activity = {
+                id: Date.now(),
+                type: 'check-out',
+                tutor: currentUser.name,
+                tutorEmail: currentUser.email,
+                school: currentSession.school,
+                lessonType: currentSession.lessonType,
+                time: hktTime.toISOString(),
+                timeDisplay: hktTime.toLocaleString('en-HK'),
+                duration: `${duration} minutes`,
+                location: userLocation?.address || 'Unknown',
+                coordinates: `${userLocation?.latitude}, ${userLocation?.longitude}`,
+                isSubstitute: currentSession.isSubstitute, // Carry over substitute status
+                sessionId: currentSession.id
+            };
+            
+            activityLog.unshift(activity);
+            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+            
+            // Save to monthly storage
+            saveToMonthlyStorage(activity);
+            
+            addToRecentActivity(activity);
+            
+            // Send email notification
+            sendEmailNotification('check-out', activity);
+            
+            // Save to Excel (simulated)
+            saveToExcel(currentSession);
+            
+            updateSessionStatus();
+            currentSession = null;
+            
+            showNotification('success', 'Checked Out Successfully', 
+                `Session completed (${duration} minutes). Email confirmation sent to ${currentUser.email} and major admin`);
+        }
+
+        // Update session status display
+        function updateSessionStatus() {
+            const statusDiv = document.getElementById('sessionStatus');
+            if (currentSession && currentSession.status === 'active') {
+                statusDiv.innerHTML = `
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div class="flex items-center space-x-2 mb-2">
+                            <div class="w-3 h-3 bg-green-500 rounded-full pulse-animation"></div>
+                            <span class="font-semibold text-green-800">Active Session</span>
+                        </div>
+                        <p class="text-sm text-green-700">School: ${currentSession.school}</p>
+                        <p class="text-sm text-green-700">Lesson: ${currentSession.lessonType}</p>
+                        <p class="text-sm text-green-700">Started: ${currentSession.checkInTime.toLocaleTimeString('en-HK')}</p>
+                        <p class="text-sm text-green-700">Location: ${currentSession.location?.address || 'Unknown'}</p>
+                        ${currentSession.isSubstitute ? '<p class="text-sm text-orange-600">⚠️ Substitute Class</p>' : ''}
+                    </div>
+                `;
+            } else {
+                statusDiv.innerHTML = '<p class="text-gray-600">No active session</p>';
+            }
+        }
+
+        // Add to recent activity
+        function addToRecentActivity(activity) {
+            const activityDiv = document.getElementById('recentActivity');
+            const activityItem = document.createElement('div');
+            activityItem.className = 'bg-gray-50 rounded-lg p-3 border-l-4 border-blue-500';
+            
+            const icon = activity.type === 'check-in' ? '🟢' : '🔴';
+            const actionText = activity.type === 'check-in' ? 'Checked in' : 'Checked out';
+            
+            activityItem.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-medium text-gray-800">${icon} ${actionText}</p>
+                        <p class="text-sm text-gray-600">${activity.school} - ${activity.lessonType}</p>
+                        <p class="text-xs text-gray-500">${activity.timeDisplay} • ${activity.location}</p>
+                        ${activity.duration ? `<p class="text-xs text-gray-500">Duration: ${activity.duration}</p>` : ''}
+                        ${activity.isSubstitute ? '<span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded mt-1 inline-block">Substitute</span>' : ''}
+                    </div>
+                </div>
+            `;
+            
+            if (activityDiv.firstChild && activityDiv.firstChild.textContent === 'No recent activity') {
+                activityDiv.innerHTML = '';
+            }
+            
+            activityDiv.insertBefore(activityItem, activityDiv.firstChild);
+            
+            // Keep only last 10 activities
+            while (activityDiv.children.length > 10) {
+                activityDiv.removeChild(activityDiv.lastChild);
+            }
+        }
+
+        // Load recent activity
+        function loadRecentActivity() {
+            const userActivities = activityLog.filter(a => a.tutorEmail === currentUser.email).slice(0, 10);
+            userActivities.forEach(activity => addToRecentActivity(activity));
+        }
+
+        // Send email notification (simulated)
+        function sendEmailNotification(type, activity) {
+            const subject = type === 'check-in' ? 'Check-in Confirmation' : 'Check-out Confirmation';
+            const actionText = type === 'check-in' ? 'checked in' : 'checked out';
+            
+            // Send to tutor
+            console.log(`📧 Email sent to ${activity.tutorEmail}:`);
+            console.log(`Subject: ${subject}`);
+            console.log(`Dear ${activity.tutor},`);
+            console.log(`You have successfully ${actionText} for your session.`);
+            console.log(`Time: ${activity.timeDisplay}`);
+            console.log(`School: ${activity.school}`);
+            console.log(`Lesson Type: ${activity.lessonType}`);
+            console.log(`Location: ${activity.location}`);
+            console.log(`Coordinates: ${activity.coordinates}`);
+            if (activity.isSubstitute) {
+                console.log(`⚠️ This was marked as a substitute class`);
+            }
+            if (activity.duration) {
+                console.log(`Duration: ${activity.duration}`);
+            }
+            console.log(`Session ID: ${activity.sessionId}`);
+            console.log(`\nThank you for using the HKBU Attendance System.`);
+            
+            // Always send to JC Projects (major admin)
+            console.log(`\n📧 Notification sent to jcprojects@hkbu.edu.hk:`);
+            console.log(`Subject: Tutor ${type.charAt(0).toUpperCase() + type.slice(1)} Alert - ${activity.tutor}`);
+            console.log(`Tutor: ${activity.tutor} (${activity.tutorEmail})`);
+            console.log(`Action: ${actionText.toUpperCase()}`);
+            console.log(`Time: ${activity.timeDisplay}`);
+            console.log(`School: ${activity.school}`);
+            console.log(`Lesson Type: ${activity.lessonType}`);
+            console.log(`Location: ${activity.location}`);
+            console.log(`GPS Coordinates: ${activity.coordinates}`);
+            if (activity.isSubstitute) {
+                console.log(`⚠️ SUBSTITUTE CLASS`);
+            }
+            if (activity.duration) {
+                console.log(`Session Duration: ${activity.duration}`);
+            }
+            console.log(`Session ID: ${activity.sessionId}`);
+            console.log(`\nThis is an automated notification from the HKBU Attendance System.`);
+        }
+
+        // Save to Excel (simulated)
+        function saveToExcel(session) {
+            const month = session.checkInTime.toLocaleString('en-HK', { month: 'long', year: 'numeric' });
+            console.log(`💾 Data saved to OneDrive Excel - Sheet: ${month}`);
+            console.log('Session data:', session);
+        }
+
+        // Update admin dashboard
+        function updateAdminDashboard() {
+            // Use both current activity log and monthly data for accurate counts
+            const allData = [...activityLog, ...getAllMonthlyData()];
+            const uniqueData = allData.filter((item, index, self) => 
+                index === self.findIndex(t => t.id === item.id)
+            );
+            
+            const activeSessions = uniqueData.filter(a => a.type === 'check-in').length - 
+                                  uniqueData.filter(a => a.type === 'check-out').length;
+            document.getElementById('activeSessions').textContent = Math.max(0, activeSessions);
+            
+            const today = new Date().toDateString();
+            const todayCheckins = uniqueData.filter(a => 
+                a.type === 'check-in' && 
+                new Date(a.time).toDateString() === today
+            ).length;
+            document.getElementById('todayCheckins').textContent = todayCheckins;
+            
+            const tutorCount = Object.values(userData).filter(u => u.role === 'tutor').length;
+            document.getElementById('totalTutors').textContent = tutorCount;
+            document.getElementById('totalSchools').textContent = schoolList.length;
+            
+            updateAdminActivity();
+        }
+
+        // Update admin activity feed
+        function updateAdminActivity() {
+            const adminActivityDiv = document.getElementById('adminActivity');
+            adminActivityDiv.innerHTML = '';
+            
+            if (activityLog.length === 0) {
+                adminActivityDiv.innerHTML = '<p class="text-gray-600">Waiting for activity...</p>';
+                return;
+            }
+            
+            activityLog.slice(0, 50).forEach(activity => {
+                const activityItem = document.createElement('div');
+                activityItem.className = 'bg-gray-50 rounded-lg p-4 border-l-4 border-purple-500';
+                
+                const icon = activity.type === 'check-in' ? '🟢' : '🔴';
+                const actionText = activity.type === 'check-in' ? 'checked in' : 'checked out';
+                
+                activityItem.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <p class="font-medium text-gray-800">${icon} ${activity.tutor} ${actionText}</p>
+                            <p class="text-sm text-gray-600">${activity.school} - ${activity.lessonType}</p>
+                            <p class="text-xs text-gray-500">${activity.timeDisplay} • ${activity.location}</p>
+                            <p class="text-xs text-gray-400">${activity.coordinates}</p>
+                            ${activity.isSubstitute ? '<span class="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded mt-1 inline-block">Substitute</span>' : ''}
+                            ${activity.duration ? `<p class="text-xs text-gray-500 mt-1">Duration: ${activity.duration}</p>` : ''}
+                        </div>
+                        <div class="text-xs text-gray-400">
+                            ID: ${activity.sessionId || activity.id}
+                        </div>
+                    </div>
+                `;
+                
+                adminActivityDiv.appendChild(activityItem);
+            });
+        }
+
+        // Download user's own records as Excel
+        function downloadMyRecords() {
+            try {
+                // Get all data for this user from both current activity log and monthly storage
+                const allMonthlyData = getAllMonthlyData();
+                const currentUserActivities = activityLog.filter(a => a.tutorEmail === currentUser.email);
+                const monthlyUserActivities = allMonthlyData.filter(a => a.tutorEmail === currentUser.email);
+                
+                // Combine and deduplicate
+                const allUserActivities = [...currentUserActivities, ...monthlyUserActivities];
+                const uniqueActivities = allUserActivities.filter((item, index, self) => 
+                    index === self.findIndex(t => t.id === item.id)
+                );
+                
+                if (uniqueActivities.length === 0) {
+                    showNotification('info', 'No Records', 'You have no attendance records to download');
+                    return;
+                }
+                
+                // Sort by time (newest first)
+                uniqueActivities.sort((a, b) => new Date(b.time) - new Date(a.time));
+                
+                // Prepare data for Excel
+                const excelData = uniqueActivities.map(activity => {
+                    const date = new Date(activity.time).toLocaleDateString('en-HK');
+                    const time = new Date(activity.time).toLocaleTimeString('en-HK');
+                    const action = activity.type === 'check-in' ? 'Check In' : 'Check Out';
+                    
+                    return {
+                        'Date': date,
+                        'Time': time,
+                        'Action': action,
+                        'School': activity.school || 'N/A',
+                        'Lesson Type': activity.lessonType || 'N/A',
+                        'Duration': activity.duration || 'N/A',
+                        'Location': activity.location || 'N/A',
+                        'GPS Coordinates': activity.coordinates || 'N/A',
+                        'Substitute Class': activity.isSubstitute ? 'Yes' : 'No',
+                        'Session ID': activity.sessionId || activity.id
+                    };
+                });
+                
+                // Check if XLSX is available
+                if (typeof XLSX === 'undefined') {
+                    showNotification('error', 'Excel Library Error', 'Excel export library not loaded. Please refresh the page.');
+                    return;
+                }
+                
+                // Create workbook and worksheet
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(excelData);
+                
+                // Set column widths
+                const colWidths = [
+                    { wch: 12 }, // Date
+                    { wch: 12 }, // Time
+                    { wch: 12 }, // Action
+                    { wch: 20 }, // School
+                    { wch: 18 }, // Lesson Type
+                    { wch: 12 }, // Duration
+                    { wch: 40 }, // Location
+                    { wch: 25 }, // GPS Coordinates
+                    { wch: 15 }, // Substitute Class
+                    { wch: 15 }  // Session ID
+                ];
+                ws['!cols'] = colWidths;
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, "My Attendance Records");
+                
+                // Generate filename
+                const filename = `My_Attendance_${currentUser.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                
+                // Write and download the file - Force download
+                try {
+                    XLSX.writeFile(wb, filename);
+                    
+                    // Send email notification to user and admin
+                    sendDownloadNotification('user_download', {
+                        userName: currentUser.name,
+                        userEmail: currentUser.email,
+                        filename: filename,
+                        recordCount: uniqueActivities.length,
+                        downloadTime: new Date().toLocaleString('en-HK')
+                    });
+                    
+                    showNotification('success', 'Excel File Downloaded', `${filename} has been downloaded to your desktop with ${uniqueActivities.length} records. Email notifications sent.`);
+                } catch (downloadError) {
+                    console.error('Download error:', downloadError);
+                    // Fallback: Create download link
+                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    // Send email notification
+                    sendDownloadNotification('user_download', {
+                        userName: currentUser.name,
+                        userEmail: currentUser.email,
+                        filename: filename,
+                        recordCount: uniqueActivities.length,
+                        downloadTime: new Date().toLocaleString('en-HK')
+                    });
+                    
+                    showNotification('success', 'Excel File Downloaded', `${filename} has been downloaded to your desktop with ${uniqueActivities.length} records. Email notifications sent.`);
+                }
+                
+            } catch (error) {
+                console.error('Excel download error:', error);
+                showNotification('error', 'Download Failed', 'There was an error creating the Excel file. Please try again.');
+            }
+        }
+
+        // Export to Excel (Admin function) - Real Excel file
+        function exportToExcel() {
+            try {
+                // Get all data from both current activity log and monthly storage
+                const allMonthlyData = getAllMonthlyData();
+                const allData = [...activityLog, ...allMonthlyData];
+                
+                // Deduplicate and get completed sessions
+                const uniqueData = allData.filter((item, index, self) => 
+                    index === self.findIndex(t => t.id === item.id)
+                );
+                
+                const completedSessions = uniqueData.filter(a => a.type === 'check-out');
+                
+                if (completedSessions.length === 0) {
+                    showNotification('info', 'No Data', 'No completed sessions to export');
+                    return;
+                }
+                
+                // Sort by time (newest first)
+                completedSessions.sort((a, b) => new Date(b.time) - new Date(a.time));
+                
+                // Prepare data for Excel
+                const excelData = completedSessions.map(session => {
+                    const checkIn = uniqueData.find(a => a.sessionId === session.sessionId && a.type === 'check-in');
+                    const month = new Date(session.time).toLocaleDateString('en-HK', { year: 'numeric', month: 'long' });
+                    
+                    return {
+                        'Month': month,
+                        'Tutor Name': session.tutor || 'N/A',
+                        'Email': session.tutorEmail || 'N/A',
+                        'School': session.school || 'N/A',
+                        'Lesson Type': session.lessonType || 'N/A',
+                        'Check In Time': checkIn?.timeDisplay || 'N/A',
+                        'Check Out Time': session.timeDisplay || 'N/A',
+                        'Duration': session.duration || 'N/A',
+                        'Location': session.location || 'N/A',
+                        'GPS Coordinates': session.coordinates || 'N/A',
+                        'Substitute Class': session.isSubstitute ? 'Yes' : 'No',
+                        'Session ID': session.sessionId || session.id
+                    };
+                });
+                
+                // Check if XLSX is available
+                if (typeof XLSX === 'undefined') {
+                    showNotification('error', 'Excel Library Error', 'Excel export library not loaded. Please refresh the page.');
+                    return;
+                }
+                
+                // Create workbook and worksheet
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(excelData);
+                
+                // Set column widths
+                const colWidths = [
+                    { wch: 15 }, // Month
+                    { wch: 20 }, // Tutor Name
+                    { wch: 25 }, // Email
+                    { wch: 20 }, // School
+                    { wch: 18 }, // Lesson Type
+                    { wch: 20 }, // Check In Time
+                    { wch: 20 }, // Check Out Time
+                    { wch: 12 }, // Duration
+                    { wch: 40 }, // Location
+                    { wch: 25 }, // GPS Coordinates
+                    { wch: 15 }, // Substitute Class
+                    { wch: 15 }  // Session ID
+                ];
+                ws['!cols'] = colWidths;
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, "Attendance Records");
+                
+                // Generate filename with current date
+                const filename = `HKBU_Attendance_Records_${new Date().toISOString().split('T')[0]}.xlsx`;
+                
+                // Write and download the file - Force download
+                try {
+                    XLSX.writeFile(wb, filename);
+                    
+                    // Send email notification to admin
+                    sendDownloadNotification('admin_export', {
+                        adminName: currentUser.name,
+                        adminEmail: currentUser.email,
+                        filename: filename,
+                        recordCount: completedSessions.length,
+                        downloadTime: new Date().toLocaleString('en-HK')
+                    });
+                    
+                    showNotification('success', 'Excel File Downloaded', `${filename} has been downloaded to your desktop with ${completedSessions.length} records. Email notifications sent.`);
+                } catch (downloadError) {
+                    console.error('Download error:', downloadError);
+                    // Fallback: Create download link
+                    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+                    const blob = new Blob([wbout], { type: 'application/octet-stream' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    // Send email notification
+                    sendDownloadNotification('admin_export', {
+                        adminName: currentUser.name,
+                        adminEmail: currentUser.email,
+                        filename: filename,
+                        recordCount: completedSessions.length,
+                        downloadTime: new Date().toLocaleString('en-HK')
+                    });
+                    
+                    showNotification('success', 'Excel File Downloaded', `${filename} has been downloaded to your desktop with ${completedSessions.length} records. Email notifications sent.`);
+                }
+                
+            } catch (error) {
+                console.error('Excel export error:', error);
+                showNotification('error', 'Export Failed', 'There was an error creating the Excel file. Please try again.');
+            }
+        }
+
+        // Clear old data (archive)
+        function clearOldData() {
+            const sixMonthsAgo = new Date();
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+            
+            const oldData = activityLog.filter(a => new Date(a.time) < sixMonthsAgo);
+            activityLog = activityLog.filter(a => new Date(a.time) >= sixMonthsAgo);
+            
+            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+            
+            console.log(`📦 Archived ${oldData.length} records older than 6 months`);
+            showNotification('success', 'Data Archived', `${oldData.length} old records have been archived`);
+            updateAdminDashboard();
+        }
+
+        // Logout function
+        function logout() {
+            currentUser = null;
+            currentSession = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
+            document.getElementById('adminPanel').classList.add('hidden');
+            document.getElementById('tutorIdBio').value = '';
+            document.getElementById('tutorIdPass').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('loginStatus').innerHTML = '';
+            
+            // Hide manage admins button
+            document.getElementById('manageAdminsBtn').classList.add('hidden');
+            
+            showNotification('info', 'Logged Out', 'You have been successfully logged out');
+        }
+
+        // Initialize the system when page loads
+        window.onload = init;
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9660e6632619a0f1',t:'MTc1MzY2OTI1NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
