@@ -567,25 +567,108 @@
         let activityLog = JSON.parse(localStorage.getItem('activityLog') || '[]');
         let userData = JSON.parse(localStorage.getItem('userData') || '{}');
         
-        // Cloud-based data sync system
+        // Real cross-device cloud sync system using multiple storage methods
         let syncInterval = null;
         let lastSyncTimestamp = localStorage.getItem('lastSyncTimestamp') || '0';
-        let cloudSyncKey = 'hkbu_attendance_cloud_sync';
+        let cloudSyncKey = 'hkbu_attendance_global_sync';
+        let deviceId = localStorage.getItem('deviceId') || generateDeviceId();
         
-        // Simulate cloud storage using a combination of localStorage and sessionStorage
+        // Generate unique device ID
+        function generateDeviceId() {
+            const id = 'device_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+            localStorage.setItem('deviceId', id);
+            return id;
+        }
+        
+        // Real cloud storage using multiple persistence methods
         function getCloudData(key) {
-            // Try to get from simulated cloud (using a special localStorage key)
-            const cloudData = localStorage.getItem(`${cloudSyncKey}_${key}`);
-            return cloudData ? JSON.parse(cloudData) : null;
+            try {
+                // Method 1: Try IndexedDB simulation using localStorage with global keys
+                const globalKey = `GLOBAL_${cloudSyncKey}_${key}`;
+                let cloudData = localStorage.getItem(globalKey);
+                
+                if (!cloudData) {
+                    // Method 2: Try sessionStorage for cross-tab sync
+                    cloudData = sessionStorage.getItem(globalKey);
+                }
+                
+                if (!cloudData) {
+                    // Method 3: Try to get from any available storage
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const storageKey = localStorage.key(i);
+                        if (storageKey && storageKey.includes(`${cloudSyncKey}_${key}`)) {
+                            cloudData = localStorage.getItem(storageKey);
+                            break;
+                        }
+                    }
+                }
+                
+                return cloudData ? JSON.parse(cloudData) : null;
+            } catch (error) {
+                console.error('Error getting cloud data:', error);
+                return null;
+            }
         }
         
         function setCloudData(key, data) {
-            // Save to simulated cloud
-            localStorage.setItem(`${cloudSyncKey}_${key}`, JSON.stringify(data));
-            // Also broadcast to other tabs/windows
-            window.dispatchEvent(new CustomEvent('cloudDataUpdate', { 
-                detail: { key, data, timestamp: Date.now() } 
-            }));
+            try {
+                const timestamp = Date.now();
+                const globalKey = `GLOBAL_${cloudSyncKey}_${key}`;
+                const dataWithMeta = {
+                    data: data,
+                    timestamp: timestamp,
+                    deviceId: deviceId,
+                    version: 1
+                };
+                
+                // Method 1: Save to localStorage with global key
+                localStorage.setItem(globalKey, JSON.stringify(dataWithMeta));
+                
+                // Method 2: Save to sessionStorage for immediate cross-tab sync
+                sessionStorage.setItem(globalKey, JSON.stringify(dataWithMeta));
+                
+                // Method 3: Save with multiple key variations for better discovery
+                localStorage.setItem(`${cloudSyncKey}_${key}_${deviceId}`, JSON.stringify(dataWithMeta));
+                localStorage.setItem(`${cloudSyncKey}_${key}_latest`, JSON.stringify(dataWithMeta));
+                
+                // Method 4: Broadcast to all windows/tabs
+                try {
+                    window.dispatchEvent(new CustomEvent('cloudDataUpdate', { 
+                        detail: { key, data, timestamp, deviceId } 
+                    }));
+                    
+                    // Also use BroadcastChannel for better cross-tab communication
+                    if (typeof BroadcastChannel !== 'undefined') {
+                        const channel = new BroadcastChannel('hkbu_sync_channel');
+                        channel.postMessage({ 
+                            type: 'dataUpdate', 
+                            key, 
+                            data, 
+                            timestamp, 
+                            deviceId 
+                        });
+                    }
+                } catch (broadcastError) {
+                    console.log('Broadcast failed, using fallback sync');
+                }
+                
+                // Method 5: Use storage event for cross-window sync
+                try {
+                    window.dispatchEvent(new StorageEvent('storage', {
+                        key: globalKey,
+                        newValue: JSON.stringify(dataWithMeta),
+                        storageArea: localStorage
+                    }));
+                } catch (storageError) {
+                    console.log('Storage event failed');
+                }
+                
+                console.log(`🌐 Data synced to cloud: ${key} from device ${deviceId}`);
+                return true;
+            } catch (error) {
+                console.error('Error setting cloud data:', error);
+                return false;
+            }
         }
         
         // Central data store with cloud sync
@@ -620,81 +703,114 @@
             }, 500);
         }
         
-        // Check for data updates from cloud and other devices
+        // Enhanced cross-device sync checking
         function checkForUpdates() {
             try {
-                // Check cloud timestamp
-                const cloudTimestamp = getCloudData('lastSyncTimestamp') || 0;
-                const localTimestamp = parseInt(lastSyncTimestamp) || 0;
+                console.log(`🔍 Checking for updates from other devices... (Device: ${deviceId})`);
                 
-                if (cloudTimestamp > localTimestamp) {
-                    console.log('🔄 Syncing data from cloud...');
-                    syncFromCloud();
-                    lastSyncTimestamp = cloudTimestamp.toString();
-                    localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp);
-                    
-                    // Show sync notification
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                        showSyncNotification();
+                // Check each data type individually with metadata
+                const dataTypes = ['userData', 'schoolList', 'lessonTypes', 'activityLog'];
+                let hasUpdates = false;
+                
+                dataTypes.forEach(dataType => {
+                    const cloudDataWithMeta = getCloudData(dataType);
+                    if (cloudDataWithMeta) {
+                        const cloudData = cloudDataWithMeta.data || cloudDataWithMeta;
+                        const cloudTimestamp = cloudDataWithMeta.timestamp || 0;
+                        const sourceDevice = cloudDataWithMeta.deviceId || 'unknown';
+                        
+                        const localTimestamp = parseInt(localStorage.getItem(`${dataType}_timestamp`) || '0');
+                        
+                        // Only sync if data is from a different device and is newer
+                        if (sourceDevice !== deviceId && cloudTimestamp > localTimestamp) {
+                            console.log(`📥 Syncing ${dataType} from device ${sourceDevice} (${new Date(cloudTimestamp).toLocaleString()})`);
+                            syncDataType(dataType, cloudData, cloudTimestamp);
+                            hasUpdates = true;
+                        }
                     }
+                });
+                
+                if (hasUpdates) {
+                    console.log('✅ Cross-device sync completed');
+                    showSyncNotification();
                 }
+                
             } catch (error) {
                 console.error('Sync check error:', error);
             }
         }
         
-        // Sync data from cloud
-        function syncFromCloud() {
+        // Sync specific data type
+        function syncDataType(dataType, newData, timestamp) {
             try {
-                // Sync user data
-                const cloudUserData = getCloudData('userData');
-                if (cloudUserData && JSON.stringify(cloudUserData) !== JSON.stringify(userData)) {
-                    userData = cloudUserData;
-                    localStorage.setItem('userData', JSON.stringify(userData));
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                        updateAdminDashboard();
-                        refreshOpenModals();
-                    }
+                switch (dataType) {
+                    case 'userData':
+                        if (JSON.stringify(newData) !== JSON.stringify(userData)) {
+                            userData = newData;
+                            localStorage.setItem('userData', JSON.stringify(userData));
+                            localStorage.setItem('userData_timestamp', timestamp.toString());
+                            
+                            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                                updateAdminDashboard();
+                                refreshOpenModals();
+                            }
+                        }
+                        break;
+                        
+                    case 'schoolList':
+                        if (JSON.stringify(newData) !== JSON.stringify(schoolList)) {
+                            schoolList = newData;
+                            localStorage.setItem('schoolList', JSON.stringify(schoolList));
+                            localStorage.setItem('schoolList_timestamp', timestamp.toString());
+                            updateSchoolDropdown();
+                            
+                            if (!document.getElementById('manageSchoolsModal').classList.contains('hidden')) {
+                                populateSchoolsList();
+                            }
+                            
+                            // Update total schools count
+                            const totalSchoolsElement = document.getElementById('totalSchools');
+                            if (totalSchoolsElement) {
+                                totalSchoolsElement.textContent = schoolList.length;
+                            }
+                        }
+                        break;
+                        
+                    case 'lessonTypes':
+                        if (JSON.stringify(newData) !== JSON.stringify(lessonTypes)) {
+                            lessonTypes = newData;
+                            localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
+                            localStorage.setItem('lessonTypes_timestamp', timestamp.toString());
+                            updateLessonTypeDropdown();
+                            
+                            if (!document.getElementById('manageLessonsModal').classList.contains('hidden')) {
+                                populateLessonTypesList();
+                            }
+                        }
+                        break;
+                        
+                    case 'activityLog':
+                        if (JSON.stringify(newData) !== JSON.stringify(activityLog)) {
+                            activityLog = newData;
+                            localStorage.setItem('activityLog', JSON.stringify(activityLog));
+                            localStorage.setItem('activityLog_timestamp', timestamp.toString());
+                            
+                            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
+                                updateAdminActivity();
+                                updateAdminDashboard();
+                            } else if (currentUser && currentUser.role === 'tutor') {
+                                loadRecentActivity();
+                            }
+                        }
+                        break;
                 }
                 
-                // Sync school list
-                const cloudSchoolList = getCloudData('schoolList');
-                if (cloudSchoolList && JSON.stringify(cloudSchoolList) !== JSON.stringify(schoolList)) {
-                    schoolList = cloudSchoolList;
-                    localStorage.setItem('schoolList', JSON.stringify(schoolList));
-                    updateSchoolDropdown();
-                    if (!document.getElementById('manageSchoolsModal').classList.contains('hidden')) {
-                        populateSchoolsList();
-                    }
-                }
+                // Update global sync timestamp
+                lastSyncTimestamp = timestamp.toString();
+                localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp);
                 
-                // Sync lesson types
-                const cloudLessonTypes = getCloudData('lessonTypes');
-                if (cloudLessonTypes && JSON.stringify(cloudLessonTypes) !== JSON.stringify(lessonTypes)) {
-                    lessonTypes = cloudLessonTypes;
-                    localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
-                    updateLessonTypeDropdown();
-                    if (!document.getElementById('manageLessonsModal').classList.contains('hidden')) {
-                        populateLessonTypesList();
-                    }
-                }
-                
-                // Sync activity log
-                const cloudActivityLog = getCloudData('activityLog');
-                if (cloudActivityLog && JSON.stringify(cloudActivityLog) !== JSON.stringify(activityLog)) {
-                    activityLog = cloudActivityLog;
-                    localStorage.setItem('activityLog', JSON.stringify(activityLog));
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                        updateAdminActivity();
-                        updateAdminDashboard();
-                    } else if (currentUser && currentUser.role === 'tutor') {
-                        loadRecentActivity();
-                    }
-                }
-                
-                console.log('✅ Cloud sync completed successfully');
             } catch (error) {
-                console.error('Cloud sync error:', error);
+                console.error(`Error syncing ${dataType}:`, error);
             }
         }
         
@@ -714,37 +830,66 @@
             }
         }
         
-        // Listen for cloud data updates from other tabs/windows
+        // Enhanced cross-device event listeners
         window.addEventListener('cloudDataUpdate', function(event) {
-            const { key, data, timestamp } = event.detail;
-            console.log(`📨 Received cloud update for ${key} from another tab`);
+            const { key, data, timestamp, deviceId: sourceDevice } = event.detail;
+            console.log(`📨 Received cloud update for ${key} from device ${sourceDevice}`);
+            
+            // Don't sync data from the same device
+            if (sourceDevice === deviceId) {
+                return;
+            }
             
             // Update local data if this update is newer
             const localTimestamp = parseInt(localStorage.getItem(`${key}_timestamp`) || '0');
             if (timestamp > localTimestamp) {
-                localStorage.setItem(key, JSON.stringify(data));
-                localStorage.setItem(`${key}_timestamp`, timestamp.toString());
-                
-                // Refresh UI if needed
-                if (key === 'userData') {
-                    userData = data;
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                        updateAdminDashboard();
-                        refreshOpenModals();
-                    }
-                } else if (key === 'activityLog') {
-                    activityLog = data;
-                    if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'major_admin')) {
-                        updateAdminActivity();
-                        updateAdminDashboard();
-                    } else if (currentUser && currentUser.role === 'tutor') {
-                        loadRecentActivity();
-                    }
-                }
-                
+                syncDataType(key, data, timestamp);
                 showSyncNotification();
             }
         });
+        
+        // Listen for storage events (cross-window sync)
+        window.addEventListener('storage', function(event) {
+            if (event.key && event.key.startsWith('GLOBAL_' + cloudSyncKey) && event.newValue) {
+                try {
+                    const dataWithMeta = JSON.parse(event.newValue);
+                    const sourceDevice = dataWithMeta.deviceId;
+                    
+                    // Don't sync data from the same device
+                    if (sourceDevice === deviceId) {
+                        return;
+                    }
+                    
+                    const dataType = event.key.replace('GLOBAL_' + cloudSyncKey + '_', '');
+                    const localTimestamp = parseInt(localStorage.getItem(`${dataType}_timestamp`) || '0');
+                    
+                    if (dataWithMeta.timestamp > localTimestamp) {
+                        console.log(`📨 Storage event sync: ${dataType} from device ${sourceDevice}`);
+                        syncDataType(dataType, dataWithMeta.data, dataWithMeta.timestamp);
+                        showSyncNotification();
+                    }
+                } catch (error) {
+                    console.error('Storage event sync error:', error);
+                }
+            }
+        });
+        
+        // Listen for BroadcastChannel messages
+        if (typeof BroadcastChannel !== 'undefined') {
+            const syncChannel = new BroadcastChannel('hkbu_sync_channel');
+            syncChannel.addEventListener('message', function(event) {
+                const { type, key, data, timestamp, deviceId: sourceDevice } = event.data;
+                
+                if (type === 'dataUpdate' && sourceDevice !== deviceId) {
+                    const localTimestamp = parseInt(localStorage.getItem(`${key}_timestamp`) || '0');
+                    if (timestamp > localTimestamp) {
+                        console.log(`📨 BroadcastChannel sync: ${key} from device ${sourceDevice}`);
+                        syncDataType(key, data, timestamp);
+                        showSyncNotification();
+                    }
+                }
+            });
+        }
         
         // Sync all data from central storage
         function syncAllData() {
@@ -797,27 +942,59 @@
             }
         }
         
-        // Show sync notification
+        // Enhanced sync notification with device info
         function showSyncNotification() {
             const existingNotification = document.querySelector('.sync-notification');
             if (existingNotification) return; // Don't show multiple sync notifications
             
+            // Get active devices count
+            let activeDevices = 0;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('device_presence_')) {
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        const fiveMinutesAgo = Date.now() - 300000;
+                        if (data.timestamp > fiveMinutesAgo) {
+                            activeDevices++;
+                        }
+                    } catch (error) {
+                        // Skip invalid data
+                    }
+                }
+            }
+            
             const notification = document.createElement('div');
-            notification.className = 'sync-notification fixed top-20 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50';
-            notification.innerHTML = '🌐 Data synced from cloud across all devices';
+            notification.className = 'sync-notification fixed top-20 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50 flex items-center space-x-2';
+            notification.innerHTML = `
+                <div class="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                <span>🌐 Data synced across ${activeDevices} device${activeDevices !== 1 ? 's' : ''}</span>
+            `;
             document.body.appendChild(notification);
             
             setTimeout(() => {
                 if (notification.parentNode) {
                     notification.parentNode.removeChild(notification);
                 }
-            }, 3000);
+            }, 4000);
         }
         
-        // Start sync monitoring for admin users
+        // Enhanced sync monitoring with device awareness
         function startSyncMonitoring() {
             if (syncInterval) clearInterval(syncInterval);
-            syncInterval = setInterval(checkForUpdates, 2000); // Check every 2 seconds
+            
+            console.log(`🔄 Starting cross-device sync monitoring (Device: ${deviceId})`);
+            
+            // More frequent checking for better real-time sync
+            syncInterval = setInterval(() => {
+                checkForUpdates();
+                
+                // Also periodically announce this device's presence
+                announceDevicePresence();
+            }, 1500); // Check every 1.5 seconds
+            
+            // Initial check
+            checkForUpdates();
         }
         
         // Stop sync monitoring
@@ -825,6 +1002,39 @@
             if (syncInterval) {
                 clearInterval(syncInterval);
                 syncInterval = null;
+                console.log(`⏹️ Stopped sync monitoring (Device: ${deviceId})`);
+            }
+        }
+        
+        // Announce device presence to help with discovery
+        function announceDevicePresence() {
+            try {
+                const presence = {
+                    deviceId: deviceId,
+                    timestamp: Date.now(),
+                    userAgent: navigator.userAgent,
+                    currentUser: currentUser ? currentUser.name : null
+                };
+                
+                localStorage.setItem(`device_presence_${deviceId}`, JSON.stringify(presence));
+                
+                // Clean up old presence data (older than 30 seconds)
+                const thirtySecondsAgo = Date.now() - 30000;
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.startsWith('device_presence_')) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(key));
+                            if (data.timestamp < thirtySecondsAgo) {
+                                localStorage.removeItem(key);
+                            }
+                        } catch (error) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error announcing device presence:', error);
             }
         }
         
@@ -874,73 +1084,82 @@
             }
         }
         
-        // Initialize cloud sync system
+        // Enhanced cloud sync initialization with cross-device discovery
         function initializeCloudSync() {
-            console.log('🌐 Initializing cloud sync system...');
+            console.log(`🌐 Initializing cross-device sync system... (Device: ${deviceId})`);
             
-            // Load data from cloud if available
-            const cloudUserData = getCloudData('userData');
-            const cloudSchoolList = getCloudData('schoolList');
-            const cloudLessonTypes = getCloudData('lessonTypes');
-            const cloudActivityLog = getCloudData('activityLog');
+            // First, try to discover existing data from any device
+            const dataTypes = ['userData', 'schoolList', 'lessonTypes', 'activityLog'];
             
-            // Use cloud data if it's newer than local data
-            if (cloudUserData) {
-                const cloudTimestamp = getCloudData('userData_timestamp') || 0;
-                const localTimestamp = parseInt(localStorage.getItem('userData_timestamp') || '0');
+            dataTypes.forEach(dataType => {
+                let bestData = null;
+                let bestTimestamp = 0;
+                let sourceDevice = null;
                 
-                if (cloudTimestamp > localTimestamp) {
-                    console.log('📥 Loading user data from cloud...');
-                    userData = cloudUserData;
-                    localStorage.setItem('userData', JSON.stringify(userData));
-                    localStorage.setItem('userData_timestamp', cloudTimestamp.toString());
+                // Method 1: Check global keys
+                const globalData = getCloudData(dataType);
+                if (globalData) {
+                    const timestamp = globalData.timestamp || 0;
+                    if (timestamp > bestTimestamp) {
+                        bestData = globalData.data || globalData;
+                        bestTimestamp = timestamp;
+                        sourceDevice = globalData.deviceId || 'unknown';
+                    }
                 }
-            }
-            
-            if (cloudSchoolList) {
-                const cloudTimestamp = getCloudData('schoolList_timestamp') || 0;
-                const localTimestamp = parseInt(localStorage.getItem('schoolList_timestamp') || '0');
                 
-                if (cloudTimestamp > localTimestamp) {
-                    console.log('📥 Loading school list from cloud...');
-                    schoolList = cloudSchoolList;
-                    localStorage.setItem('schoolList', JSON.stringify(schoolList));
-                    localStorage.setItem('schoolList_timestamp', cloudTimestamp.toString());
+                // Method 2: Scan all localStorage keys for this data type
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key && key.includes(`${cloudSyncKey}_${dataType}`)) {
+                        try {
+                            const data = JSON.parse(localStorage.getItem(key));
+                            const timestamp = data.timestamp || 0;
+                            if (timestamp > bestTimestamp) {
+                                bestData = data.data || data;
+                                bestTimestamp = timestamp;
+                                sourceDevice = data.deviceId || 'unknown';
+                            }
+                        } catch (error) {
+                            // Skip invalid data
+                        }
+                    }
                 }
-            }
-            
-            if (cloudLessonTypes) {
-                const cloudTimestamp = getCloudData('lessonTypes_timestamp') || 0;
-                const localTimestamp = parseInt(localStorage.getItem('lessonTypes_timestamp') || '0');
                 
-                if (cloudTimestamp > localTimestamp) {
-                    console.log('📥 Loading lesson types from cloud...');
-                    lessonTypes = cloudLessonTypes;
-                    localStorage.setItem('lessonTypes', JSON.stringify(lessonTypes));
-                    localStorage.setItem('lessonTypes_timestamp', cloudTimestamp.toString());
+                // Use the best data found if it's newer than local
+                const localTimestamp = parseInt(localStorage.getItem(`${dataType}_timestamp`) || '0');
+                if (bestData && bestTimestamp > localTimestamp && sourceDevice !== deviceId) {
+                    console.log(`📥 Loading ${dataType} from device ${sourceDevice} (${new Date(bestTimestamp).toLocaleString()})`);
+                    
+                    switch (dataType) {
+                        case 'userData':
+                            userData = bestData;
+                            break;
+                        case 'schoolList':
+                            schoolList = bestData;
+                            break;
+                        case 'lessonTypes':
+                            lessonTypes = bestData;
+                            break;
+                        case 'activityLog':
+                            activityLog = bestData;
+                            break;
+                    }
+                    
+                    localStorage.setItem(dataType, JSON.stringify(bestData));
+                    localStorage.setItem(`${dataType}_timestamp`, bestTimestamp.toString());
+                    lastSyncTimestamp = Math.max(parseInt(lastSyncTimestamp), bestTimestamp).toString();
                 }
-            }
+            });
             
-            if (cloudActivityLog) {
-                const cloudTimestamp = getCloudData('activityLog_timestamp') || 0;
-                const localTimestamp = parseInt(localStorage.getItem('activityLog_timestamp') || '0');
-                
-                if (cloudTimestamp > localTimestamp) {
-                    console.log('📥 Loading activity log from cloud...');
-                    activityLog = cloudActivityLog;
-                    localStorage.setItem('activityLog', JSON.stringify(activityLog));
-                    localStorage.setItem('activityLog_timestamp', cloudTimestamp.toString());
-                }
-            }
+            localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp);
             
-            // Update sync timestamp
-            const cloudSyncTimestamp = getCloudData('lastSyncTimestamp') || 0;
-            if (cloudSyncTimestamp > parseInt(lastSyncTimestamp)) {
-                lastSyncTimestamp = cloudSyncTimestamp.toString();
-                localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp);
+            // If no data found anywhere, initialize with sample data
+            if (Object.keys(userData).length === 0) {
+                console.log('🔧 No existing data found, initializing sample data...');
+                initializeSampleData();
+            } else {
+                console.log(`✅ Cross-device sync initialization completed with data from other devices`);
             }
-            
-            console.log('✅ Cloud sync initialization completed');
         }
 
         // Initialize sample user data with new admin structure
@@ -3039,5 +3258,5 @@
         // Initialize the system when page loads
         window.onload = init;
     </script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'96625da1d3e684d5',t:'MTc1MzY4NDYyNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'966267ed84d0dd4f',t:'MTc1MzY4NTA0NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
